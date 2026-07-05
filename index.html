@@ -1804,9 +1804,6 @@
 
               // 处理 content（正式回答）
               if (delta.content) {
-                if (reasoningContent && !answerContent) {
-                  clearStatus(elems);
-                }
                 answerContent += delta.content;
                 elems.bubble.textContent = answerContent;
                 scrollToBottom();
