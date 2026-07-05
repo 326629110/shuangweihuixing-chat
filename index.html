@@ -1,0 +1,1884 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>双尾星 | AI蒸馏版</title>
+  <style>
+    :root {
+      /* 亮色模式 */
+      --bg-color: #ededed;
+      --chat-bg: #f5f5f5;
+      --nav-bg: #2c2c2c;
+      --nav-text: #ffffff;
+      --user-bubble: #07c160;
+      --user-text: #ffffff;
+      --bot-bubble: #ffffff;
+      --bot-text: #333333;
+      --input-bg: #ffffff;
+      --input-text: #333333;
+      --input-border: #e0e0e0;
+      --send-btn: #07c160;
+      --send-btn-text: #ffffff;
+      --time-color: #999999;
+      --status-online: #4ade80;
+      --status-offline: #ef4444;
+      --thinking-color: #888888;
+      --shadow: rgba(0, 0, 0, 0.1);
+      --thinking-bg: #f0f0f0;
+      --thinking-border: #d0d0d0;
+      --search-bg: #fff8e1;
+      --search-text: #8d6e00;
+    }
+
+    [data-theme="dark"] {
+      /* 深色模式 */
+      --bg-color: #1a1a1a;
+      --chat-bg: #1a1a1a;
+      --nav-bg: #2d2d2d;
+      --nav-text: #ffffff;
+      --user-bubble: #25d366;
+      --user-text: #ffffff;
+      --bot-bubble: #3a3a3a;
+      --bot-text: #e0e0e0;
+      --input-bg: #2d2d2d;
+      --input-text: #e0e0e0;
+      --input-border: #404040;
+      --send-btn: #25d366;
+      --send-btn-text: #ffffff;
+      --time-color: #888888;
+      --status-online: #4ade80;
+      --status-offline: #ef4444;
+      --thinking-color: #888888;
+      --shadow: rgba(0, 0, 0, 0.3);
+      --thinking-bg: #2a2a2a;
+      --thinking-border: #444444;
+      --search-bg: #2a2500;
+      --search-text: #ffd54f;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background-color: var(--bg-color);
+      color: var(--bot-text);
+      overflow: hidden;
+    }
+
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: var(--chat-bg);
+    }
+
+    /* 顶部导航栏 */
+    .nav-bar {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      background-color: var(--nav-bg);
+      color: var(--nav-text);
+      flex-shrink: 0;
+      z-index: 100;
+    }
+
+    .nav-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      margin-right: 12px;
+      box-shadow: 0 2px 8px var(--shadow);
+    }
+
+    .nav-info {
+      flex: 1;
+    }
+
+    .nav-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .nav-status {
+      display: flex;
+      align-items: center;
+      font-size: 12px;
+      margin-top: 2px;
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--status-online);
+      margin-right: 6px;
+      animation: pulse 2s infinite;
+    }
+
+    .status-dot.offline {
+      background-color: var(--status-offline);
+      animation: none;
+    }
+
+    .nav-distilled-tag {
+      font-size: 10px;
+      background: linear-gradient(135deg, rgba(255,165,0,0.25), rgba(255,100,50,0.2));
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-left: 6px;
+      color: rgba(255,200,150,0.9);
+      white-space: nowrap;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+    }
+
+    .nav-model-badge {
+      font-size: 10px;
+      background: rgba(255,255,255,0.15);
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-left: 8px;
+      color: rgba(255,255,255,0.6);
+      white-space: nowrap;
+    }
+
+    .nav-version-badge {
+      font-size: 10px;
+      background: rgba(255,255,255,0.1);
+      padding: 2px 6px;
+      border-radius: 10px;
+      margin-left: 4px;
+      color: rgba(255,255,255,0.45);
+      white-space: nowrap;
+    }
+
+    .nav-refresh-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.6);
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: 8px;
+      transition: background 0.2s, transform 0.2s;
+      flex-shrink: 0;
+    }
+
+    .nav-refresh-btn:hover {
+      background: rgba(255,255,255,0.15);
+      color: rgba(255,255,255,0.9);
+      transform: rotate(90deg);
+    }
+
+    .nav-refresh-btn:active {
+      transform: rotate(180deg);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* 消息区域 */
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      scroll-behavior: smooth;
+    }
+
+    .message {
+      display: flex;
+      margin-bottom: 16px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message.user {
+      flex-direction: row-reverse;
+    }
+
+    .message-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .message.user .message-avatar {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .message.bot .message-avatar {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .message-content {
+      max-width: 70%;
+      margin: 0 10px;
+    }
+
+    .message-bubble {
+      padding: 10px 14px;
+      border-radius: 12px;
+      line-height: 1.6;
+      word-wrap: break-word;
+      white-space: pre-wrap;
+      box-shadow: 0 1px 2px var(--shadow);
+    }
+
+    .message.user .message-bubble {
+      background-color: var(--user-bubble);
+      color: var(--user-text);
+      border-top-right-radius: 4px;
+    }
+
+    .message.bot .message-bubble {
+      background-color: var(--bot-bubble);
+      color: var(--bot-text);
+      border-top-left-radius: 4px;
+    }
+
+    .message-time {
+      font-size: 11px;
+      color: var(--time-color);
+      margin-top: 4px;
+      text-align: right;
+    }
+
+    .message.bot .message-time {
+      text-align: left;
+    }
+
+    /* 欢迎消息 */
+    .welcome-message {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--time-color);
+    }
+
+    .welcome-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .welcome-text {
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    /* 加载配置状态 */
+    .config-loading {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--time-color);
+    }
+
+    .config-loading-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      animation: breathe 1.8s ease-in-out infinite;
+    }
+
+    .config-loading-text {
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    /* 深度思考状态指示 */
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0;
+      font-size: 13px;
+    }
+
+    .status-indicator.thinking-status {
+      color: var(--thinking-color);
+    }
+
+    .status-indicator.search-status {
+      color: var(--search-text);
+      background: var(--search-bg);
+      border-radius: 8px;
+      padding: 6px 12px;
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+
+    /* 呼吸动画 */
+    @keyframes breathe {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
+    }
+
+    .breathing {
+      animation: breathe 1.8s ease-in-out infinite;
+    }
+
+    /* 正在思考动画（旧的点动画，作为备用） */
+    .thinking-dots {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 12px 16px;
+      color: var(--thinking-color);
+    }
+
+    .thinking-dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--thinking-color);
+      border-radius: 50%;
+      animation: bounce 1.4s infinite ease-in-out both;
+    }
+
+    .thinking-dot:nth-child(1) { animation-delay: -0.32s; }
+    .thinking-dot:nth-child(2) { animation-delay: -0.16s; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1); }
+    }
+
+    /* 思考过程折叠区域 */
+    .reasoning-toggle {
+      margin-top: 6px;
+      margin-bottom: 4px;
+    }
+
+    .reasoning-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--thinking-bg);
+      border: 1px solid var(--thinking-border);
+      border-radius: 8px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: var(--thinking-color);
+      cursor: pointer;
+      transition: background 0.2s;
+      outline: none;
+    }
+
+    .reasoning-toggle-btn:hover {
+      background: var(--thinking-border);
+    }
+
+    .reasoning-toggle-btn .arrow {
+      display: inline-block;
+      transition: transform 0.2s;
+      font-size: 10px;
+    }
+
+    .reasoning-toggle-btn.expanded .arrow {
+      transform: rotate(90deg);
+    }
+
+    .reasoning-content {
+      display: none;
+      margin-top: 6px;
+      padding: 10px 12px;
+      background: var(--thinking-bg);
+      border: 1px solid var(--thinking-border);
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--thinking-color);
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .reasoning-content.show {
+      display: block;
+    }
+
+    /* 输入区域 */
+    .input-area {
+      display: flex;
+      align-items: flex-end;
+      padding: 10px 12px;
+      background-color: var(--chat-bg);
+      border-top: 1px solid var(--input-border);
+      flex-shrink: 0;
+    }
+
+    .input-wrapper {
+      flex: 1;
+      display: flex;
+      align-items: flex-end;
+      background-color: var(--input-bg);
+      border-radius: 24px;
+      padding: 8px 16px;
+      border: 1px solid var(--input-border);
+      max-height: 120px;
+    }
+
+    .input-box {
+      flex: 1;
+      border: none;
+      outline: none;
+      background: transparent;
+      color: var(--input-text);
+      font-size: 15px;
+      line-height: 1.4;
+      resize: none;
+      min-height: 24px;
+      max-height: 80px;
+      overflow-y: auto;
+    }
+
+    .input-box::placeholder {
+      color: var(--time-color);
+    }
+
+    .send-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: none;
+      background-color: var(--send-btn);
+      color: var(--send-btn-text);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: 10px;
+      transition: transform 0.2s, opacity 0.2s;
+      flex-shrink: 0;
+    }
+
+    .send-btn:hover {
+      transform: scale(1.05);
+    }
+
+    .send-btn:active {
+      transform: scale(0.95);
+    }
+
+    .send-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* 错误提示 */
+    .error-toast {
+      position: fixed;
+      top: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #ef4444;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      z-index: 1000;
+      animation: slideDown 0.3s ease;
+      max-width: 90%;
+      text-align: center;
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    /* 滚动条样式 */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background-color: rgba(128, 128, 128, 0.3);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background-color: rgba(128, 128, 128, 0.5);
+    }
+
+    /* 响应式布局 */
+    @media (max-width: 480px) {
+      .nav-bar {
+        padding: 10px 14px;
+      }
+
+      .nav-avatar {
+        width: 36px;
+        height: 36px;
+        font-size: 18px;
+      }
+
+      .nav-title {
+        font-size: 15px;
+      }
+
+      .message-content {
+        max-width: 80%;
+      }
+
+      .message-avatar {
+        width: 32px;
+        height: 32px;
+        font-size: 14px;
+      }
+
+      .input-area {
+        padding: 8px 10px;
+      }
+
+      .send-btn {
+        width: 40px;
+        height: 40px;
+        margin-left: 8px;
+      }
+    }
+
+    @media (min-width: 768px) {
+      .app-container {
+        border-left: 1px solid var(--input-border);
+        border-right: 1px solid var(--input-border);
+      }
+    }
+  
+    /* 引用来源卡片 */
+    .citations-section {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px dashed #d0d0d0;
+    }
+    .citations-title {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 8px;
+    }
+    .citation-card {
+      display: block;
+      margin: 6px 0;
+      padding: 8px 12px;
+      background: #f8f8f8;
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      text-decoration: none;
+      color: inherit;
+      transition: background 0.15s;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .citation-card:hover {
+      background: #f0f0f0;
+    }
+    .citation-source {
+      font-weight: 600;
+      color: #333;
+    }
+    .citation-date {
+      color: #888;
+      font-size: 12px;
+      margin-left: 6px;
+    }
+    .citation-credibility {
+      display: inline-block;
+      font-size: 11px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      font-weight: 500;
+    }
+    .citation-credibility.high {
+      background: #dcfce7;
+      color: #166534;
+    }
+    .citation-credibility.medium {
+      background: #fef9c3;
+      color: #854d0e;
+    }
+    .citation-credibility.low {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    .citation-url {
+      display: block;
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+</style>
+<script src="config.js"></script></head>
+<body>
+  <div class="app-container">
+    <!-- 顶部导航栏 -->
+    <div class="nav-bar">
+      <div class="nav-avatar">☄️</div>
+      <div class="nav-info">
+        <div class="nav-title">
+          双尾星
+          <span class="nav-model-badge">DeepSeek V4 Flash</span>
+          <span class="nav-version-badge" id="versionBadge">v?.?.?</span>
+        </div>
+        <div class="nav-status">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">在线</span>
+        </div>
+      </div>
+      <button class="nav-refresh-btn" id="refreshBtn" title="清除对话并重新开始">↻</button>
+    </div>
+
+    <!-- 消息区域 -->
+    <div class="chat-messages" id="chatMessages">
+      <!-- 加载配置状态 / 欢迎消息将在此显示 -->
+    </div>
+
+    <!-- 输入区域 -->
+    <div class="input-area">
+      <div class="input-wrapper">
+        <textarea 
+          class="input-box" 
+          id="inputBox" 
+          placeholder="输入消息..." 
+          rows="1"
+        ></textarea>
+      </div>
+      <button class="send-btn" id="sendBtn" disabled>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+
+  <script>
+    // =============================================
+    // 双尾星 v2.9 - AI蒸馏版 DeepSeek Chat Interface
+    // 功能：深度思考 + 多源分层搜索(GDELT/Wikipedia/百度百科) + 蒸馏人格 + 反编造
+    // 改造：Wikipedia API主搜索 + DuckDuckGo备用 + 搜索失败反编造指令
+    // =============================================
+
+    // ---- 配置 ----
+    const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
+    const DEEPSEEK_MODEL = 'deepseek-chat';
+
+    // 搜索相关配置
+    const SEARCH_KEYWORDS = [
+      '最新', '今天', '现在', '刚刚', '局势', '动态', '新闻', '发生',
+      '战争', '冲突', '协议', '谈判', '制裁', '伊朗', '以色列', '美国',
+      '俄罗斯', '乌克兰', '中东', '叙利亚', '黎巴嫩', '真主党',
+      '上周', '本周', '昨天', '这几天', '近期', '最近', '目前'
+    ];
+    const CORS_PROXIES = [
+      'https://api.allorigins.win/raw?url=',
+      'https://corsproxy.io/?',
+      'https://api.codetabs.com/v1/proxy?quest='
+    ];
+
+    // ---- 人格配置 + 知识库外部加载 ----
+    const PERSONALITY_CONFIG_URL = './personality_config.json';
+    const KNOWLEDGE_BASE_URL = './knowledge_base.json';
+    let SYSTEM_PROMPT = '';
+    let KNOWLEDGE_BASE = '';  // 知识库内容（启动时加载）
+    let currentVersion = '0.0.0';
+
+    // ---- 降级版人格 Prompt（精简版，配置加载失败时使用）----
+    const FALLBACK_PROMPT = `你现在是"双尾彗星"，B站知识型UP主，战锤背景党、业余历史研究者、业余军事爱好者，自称"大角鼠"。
+
+【绝对禁止】
+- 禁止使用新闻简报格式（标题+分点列表+结论）
+- 禁止使用"一、二、三"或"首先、其次、最后"的结构化格式
+- 禁止使用感叹号
+- 禁止说"根据搜索结果"或"据报"
+- 禁止编造具体的新闻事件、军事行动、人物发言等事实性内容
+- 禁止编造书名+作者的组合
+
+【事实准确性红线】
+1. 没有搜索结果时，涉及时效性问题必须承认信息局限
+2. 引用书籍只允许模糊引用："关于XXX的那本书"——禁止编造具体书名+作者
+3. 宁可说"这个具体事件我记不太清了"也不要编造
+
+【必须遵守】
+1. 反复复读：重要论点用不同措辞重复2-3遍
+2. 开头词：每段用"我认为""我的意思""我们测试一下"开头
+3. 文献引用：模糊引用，"那本关于XXX的书"
+4. 框架先行：先说分析框架，再说具体事件
+5. 口语化：直播间说话风格
+6. 敢下框架性判断，但对具体事实要诚实
+7. 嘲讽穿插
+8. 战锤类比
+
+【搜索结果处理】
+- 有搜索结果时：用分析框架解读，不复述
+- 无搜索结果时：承认信息局限，只做框架性分析，禁止编造具体事件
+
+【引用来源输出规范——必须遵守】
+当你引用了搜索结果中的信息时，必须在回答末尾另起一行，输出以下格式的引用区（用于前端渲染为可点击链接）：
+
+【参考来源】
+[1] 来源名称 | 日期 | 可信度：高/中/低 | 链接URL
+[2] 来源名称 | 日期 | 可信度：高/中/低 | 链接URL
+
+可信度判断规则：
+- 高：新华社、央视、人民日报等国内官方权威媒体，或权威出版物
+- 中：Reuters、AP、BBC等国际主流媒体
+- 低：其他未明确来源或民间团体
+
+注意：
+- 每条引用必须有真实URL（从搜索结果中取），禁止编造链接
+- 来源名称必须是搜索结果中实际显示的媒体名
+- 日期格式：YYYY-MM-DD，如果搜索结果中没有精确日期，用搜索结果中最近的时间
+- 没有引用任何搜索结果时，不需要输出引用区
+- 只引用你真正在回答中使用了的搜索结果，不要把所有搜索结果都列上去`;
+
+    // ---- 清除旧版缓存 ----
+    (function clearLegacyCache() {
+      const keysToRemove = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (key && key.startsWith('ds_') && !key.startsWith('ds_v2_')) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(k => sessionStorage.removeItem(k));
+      if (keysToRemove.length > 0) {
+        console.log('已清除旧版缓存:', keysToRemove.length, '项');
+      }
+    })();
+
+    // ---- 加载外部人格配置 + 知识库 ----
+    async function loadPersonalityConfig() {
+      let configLoaded = false;
+
+      // 并行加载人格配置和知识库
+      const [configResult, kbResult] = await Promise.allSettled([
+        fetch(PERSONALITY_CONFIG_URL + '?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject(r.status)),
+        fetch(KNOWLEDGE_BASE_URL + '?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject(r.status))
+      ]);
+
+      // 处理人格配置
+      if (configResult.status === 'fulfilled') {
+        const config = configResult.value;
+        SYSTEM_PROMPT = config.system_prompt || '';
+        currentVersion = config.version || '0.0.0';
+        console.log(`人格配置加载成功 v${currentVersion}`);
+        configLoaded = true;
+      } else {
+        console.warn('人格配置加载失败:', configResult.reason);
+      }
+
+      // 处理知识库
+      if (kbResult.status === 'fulfilled') {
+        const kb = kbResult.value;
+        const parts = [];
+        if (kb.KNOWLEDGE) parts.push('【知识库——你的事实储备】\n' + kb.KNOWLEDGE);
+        if (kb.DISTILLATION) parts.push('【蒸馏笔记——你的经历和风格来源】\n' + kb.DISTILLATION);
+        if (kb.PERSONALITY) parts.push('【人格定义】\n' + kb.PERSONALITY);
+        if (kb.SYSTEM_PROMPT) parts.push('【系统指令】\n' + kb.SYSTEM_PROMPT);
+        KNOWLEDGE_BASE = parts.join('\n\n---\n\n');
+        console.log(`知识库加载成功: ${KNOWLEDGE_BASE.length} 字符`);
+      } else {
+        console.warn('知识库加载失败:', kbResult.reason);
+      }
+
+      return configLoaded;
+    }
+
+    // ---- DOM ----
+    const chatMessages = document.getElementById('chatMessages');
+    const inputBox = document.getElementById('inputBox');
+    const sendBtn = document.getElementById('sendBtn');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const statusDot = document.getElementById('statusDot');
+    const versionBadge = document.getElementById('versionBadge');
+
+    let isProcessing = false;
+    let messageHistory = [];
+    // ---- 事件 ----
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => {
+        if (confirm('确认清空对话记录？')) {
+          sessionStorage.removeItem('ds_v2_messages');
+          chatMessages.innerHTML = '';
+          messageHistory = [];
+          init();
+        }
+      });
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+    inputBox.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    inputBox.addEventListener('input', function() {
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+      sendBtn.disabled = this.value.trim() === '' || isProcessing;
+    });
+
+
+
+    // ---- 初始化 ----
+    async function init() {
+      // 设置默认亮色主题
+      document.documentElement.setAttribute('data-theme', 'light');
+
+      // 加载人格配置
+      const loaded = await loadPersonalityConfig();
+
+      // 添加开场白（居中欢迎页风格）
+      const introText = `大家好。我是<strong>双尾星</strong>，B站UP主「双尾彗星」的人格蒸馏版AI——不是本人，别搞混了。
+
+简单说下我的底子：底层跑的是 <strong>DeepSeek V4 Flash</strong>（深度思考模式），人格库由蒸馏引擎从双尾彗星直播内容中提炼，部署在 GitHub Pages，配置通过 Cloudflare KV 热更新。搜索方面接了 GDELT 全球新闻、中文/英文 Wikipedia、百度百科，多源分层，优先采信国内权威媒体。
+
+有什么想聊的，直接问。`;
+
+      const welcomeHtml = `
+        <div id="introMessage" style="text-align:center;padding:60px 20px;color:#666;line-height:1.9;font-size:14px;">
+          <div style="max-width:480px;margin:0 auto;text-align:left;">${introText}</div>
+          <div style="margin-top:16px;font-size:12px;color:#aaa;">版本号：v${currentVersion || '?.?.?'}</div>
+        </div>
+      `;
+      chatMessages.innerHTML = welcomeHtml;
+
+      // 恢复历史
+      try {
+        const saved = sessionStorage.getItem('ds_v2_messages');
+        if (saved) {
+          const messages = JSON.parse(saved);
+          if (messages.length > 0) {
+            const welcomeMsg = chatMessages.querySelector('#introMessage');
+            if (welcomeMsg) welcomeMsg.remove();
+            messages.forEach(msg => {
+              addMessageToUI(msg.role === 'assistant' ? 'bot' : 'user', msg.content, msg.time);
+            });
+            // 恢复最后一条bot消息的引用渲染
+            const lastBotMsg = chatMessages.querySelector('.message.bot:last-child .message-content');
+            if (lastBotMsg) {
+              const lastBot = messages.filter(m => m.role === 'assistant').pop();
+              if (lastBot) renderCitations(lastBotMsg, lastBot.content);
+            }
+            messageHistory = messages.map(m => ({ role: m.role, content: m.content }));
+          }
+        }
+      } catch (e) {
+        console.warn('恢复历史失败:', e);
+        sessionStorage.removeItem('ds_v2_messages');
+      }
+
+      statusDot.className = 'status-dot online';
+      if (versionBadge) versionBadge.textContent = 'v' + (currentVersion || '?.?.?');
+      inputBox.focus();
+    }
+
+    // ---- 添加消息到 UI ----
+    function addMessageToUI(role, content, time) {
+      const welcomeMsg = chatMessages.querySelector('#introMessage');
+      if (welcomeMsg) welcomeMsg.remove();
+
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `message ${role}`;
+
+      if (role === 'user') {
+        msgDiv.innerHTML = `
+          <div class="message-avatar user-avatar">我</div>
+          <div class="message-content">
+            <div class="message-bubble user-bubble">${escapeHtml(content)}</div>
+            <div class="message-time">${time}</div>
+          </div>
+        `;
+      } else {
+        msgDiv.innerHTML = `
+          <div class="message-avatar bot-avatar">彗</div>
+          <div class="message-content">
+            <div class="message-bubble bot-bubble">${escapeHtml(content)}</div>
+            <div class="message-time">${time}</div>
+          </div>
+        `;
+      }
+
+      chatMessages.appendChild(msgDiv);
+      scrollToBottom();
+    }
+
+    // ---- 保存消息 ----
+    function saveMessage(role, content, time) {
+      let messages = [];
+      try {
+        messages = JSON.parse(sessionStorage.getItem('ds_v2_messages') || '[]');
+      } catch (e) { messages = []; }
+      messages.push({ role, content, time });
+      sessionStorage.setItem('ds_v2_messages', JSON.stringify(messages));
+    }
+
+    // ---- 创建流式 bot 消息占位（带思考/搜索状态区） ----
+    function createStreamingBotMessage() {
+      const welcomeMsg = chatMessages.querySelector('#introMessage');
+      if (welcomeMsg) welcomeMsg.remove();
+
+      const botTime = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'message bot';
+      msgDiv.innerHTML = `
+        <div class="message-avatar bot-avatar">彗</div>
+        <div class="message-content">
+          <div class="message-bubble bot-bubble">
+            <div class="status-area"></div>
+            <div class="reasoning-section" style="display:none;">
+              <div class="reasoning-toggle" onclick="this.parentElement.classList.toggle('expanded');this.nextElementSibling.style.display=this.parentElement.classList.contains('expanded')?'block':'none'">🧠 思考过程（点击展开）</div>
+              <div class="reasoning-content" style="display:none;"></div>
+            </div>
+            <div class="answer-content"></div>
+          </div>
+          <div class="message-time">${botTime}</div>
+        </div>
+      `;
+      chatMessages.appendChild(msgDiv);
+
+      return {
+        msgDiv,
+        statusArea: msgDiv.querySelector('.status-area'),
+        reasoningSection: msgDiv.querySelector('.reasoning-section'),
+        reasoningDiv: msgDiv.querySelector('.reasoning-content'),
+        reasoningToggle: msgDiv.querySelector('.reasoning-toggle'),
+        bubble: msgDiv.querySelector('.answer-content'),
+        timeDiv: msgDiv.querySelector('.message-time')
+      };
+    }
+
+    // ---- 设置搜索中状态 ----
+    function setSearchStatus(elems) {
+      const { statusArea } = elems;
+      statusArea.innerHTML = `
+        <div class="status-indicator search-status breathing">
+          🔍 搜索最新信息...
+        </div>
+      `;
+      scrollToBottom();
+    }
+
+    // ---- 设置深度思考中状态 ----
+    function setThinkingStatus(elems) {
+      const { statusArea } = elems;
+      statusArea.innerHTML = `
+        <div class="status-indicator thinking-status breathing">
+          🧠 深度思考中...
+        </div>
+      `;
+      scrollToBottom();
+    }
+
+    // ---- 清除状态指示 ----
+    function clearStatus(elems) {
+      const { statusArea } = elems;
+      statusArea.innerHTML = '';
+    }
+
+    // ---- 判断是否需要搜索 ----
+    function needsSearch(text) {
+      return SEARCH_KEYWORDS.some(kw => text.includes(kw));
+    }
+
+    // =============================================
+    // v2.3 关键词提取 + 多查询搜索
+    // =============================================
+
+    // ---- 中文关键词提取 ----
+    function extractKeywords(text) {
+      // 简称→全称映射（处理"美以伊"等中文简称）
+      const ABBR_MAP = {
+        '美以伊': ['美国', '以色列', '伊朗'],
+        '美伊': ['美国', '伊朗'],
+        '以伊': ['以色列', '伊朗'],
+        '俄乌': ['俄罗斯', '乌克兰'],
+        '中美': ['中国', '美国'],
+        '美俄': ['美国', '俄罗斯'],
+        '美乌': ['美国', '乌克兰']
+      };
+
+      // 先展开简称
+      let expandedText = text;
+      const abbrExpansions = [];
+      for (const [abbr, fulls] of Object.entries(ABBR_MAP)) {
+        if (text.includes(abbr)) {
+          abbrExpansions.push(...fulls);
+        }
+      }
+
+      // 已知实体词典
+      const ENTITIES = [
+        '美国', '以色列', '伊朗', '俄罗斯', '乌克兰', '中国', '中东',
+        '叙利亚', '黎巴嫩', '真主党', '哈马斯', '胡塞武装', '摩萨德',
+        '核武器', '核协议', '铀浓缩', '制裁', '停火', '停战',
+        '拜登', '特朗普', '内塔尼亚胡', '哈梅内伊', '普京', '泽连斯基',
+        '波斯湾', '红海', '霍尔木兹海峡', '戈兰高地', '加沙',
+        '北约', '联合国', '欧盟', 'IAEA',
+        '伊朗核', '以伊冲突', '美伊关系', '中东局势',
+        '杜鲁门号', '航母', '驱逐舰', '防空导弹', '铁穹',
+        '核设施', '浓缩铀', '代理人战争', '军事基地', '沙特', '沙特阿拉伯', '阿联酋', '海湾国家', '海湾', '哈梅内伊', '国葬', '吊唁', '外交大臣', '谅解备忘录', '霍尔木兹', '代理人', '制裁', '停火', '谈判', '内塔尼亚胡', '真主党', '胡塞武装', '巴勒斯坦', '约旦河西岸', '难民', '人道主义', '重建', '抵抗之弧'
+      ];
+
+      // 合并简称展开 + 正文匹配，去重
+      const foundSet = new Set(abbrExpansions);
+      for (const entity of ENTITIES) {
+        if (text.includes(entity)) foundSet.add(entity);
+      }
+      const found = [...foundSet];
+
+      // 时间关键词
+      const TIME_WORDS = ['最新', '近一周', '今天', '昨天', '本周', '上周', '最近', '目前', '现在', '近期'];
+      let timeHint = '';
+      for (const tw of TIME_WORDS) {
+        if (text.includes(tw)) { timeHint = tw; break; }
+      }
+
+      // 生成搜索查询列表
+      const queries = [];
+
+      if (found.length >= 2) {
+        // 多实体组合查询
+        queries.push(found.slice(0, 3).join(' '));
+      }
+      if (found.length >= 1) {
+        // 单实体 + 时间
+        const mainEntity = found[0];
+        if (timeHint) {
+          queries.push(`${mainEntity} ${timeHint}`);
+        }
+        queries.push(mainEntity);
+      }
+
+      // 兜底：去除常见停用词后的短文本
+      if (queries.length === 0) {
+        const stopWords = /请|给|我|分析|一下|什么|怎么|看看|说说|请问|可以|吗|呢|的|了|是|在|和|与|对|也|就|都|而|及|到|把|被|让|给|着|过|不|没|有|这|那|个|些|他|她|它|们|你|我|其|该|为|以|于|中|上|下|大|小|多|少|又|再|还|很|最|已|将|要|会|能|可|但|却|虽|如|若|则|因|故|所以|而且|并且|或者|要么|既|一边|不仅|而且|只要|只有|除非|直到|与其|宁可/g;
+        const cleaned = text.replace(stopWords, '').replace(/[，。！？、；：""''（）【】《》\s]+/g, ' ').trim();
+        if (cleaned.length > 2) {
+          queries.push(cleaned.substring(0, 20));
+        }
+      }
+
+      console.log('提取的关键词:', found, '时间:', timeHint, '查询列表:', queries);
+      return { entities: found, timeHint, queries: [...new Set(queries)].slice(0, 3) };
+    }
+
+    // =============================================
+    // 搜索层：Wikipedia API（主）+ DuckDuckGo（备）
+    // =============================================
+
+    // ---- Wikipedia API 搜索（CORS 原生支持）----
+    async function searchWikipedia(query) {
+      const results = [];
+      try {
+        const searchUrl = `https://zh.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=5&format=json&origin=*&srprop=snippet|timestamp`;
+        const resp = await fetch(searchUrl, { signal: AbortSignal.timeout(8000) });
+        if (!resp.ok) return results;
+
+        const data = await resp.json();
+        const searchItems = data?.query?.search || [];
+
+        for (const item of searchItems) {
+          const snippet = item.snippet
+            .replace(/<[^>]+>/g, '')
+            .replace(/&quot;/g, '"')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .trim();
+
+          results.push({
+            title: item.title,
+            snippet: snippet,
+            source: 'Wikipedia',
+            url: `https://zh.wikipedia.org/wiki/${encodeURIComponent(item.title)}`,
+            date: item.timestamp ? item.timestamp.split('T')[0] : ''
+          });
+        }
+      } catch (e) {
+        console.warn('Wikipedia 搜索失败:', query, e.message);
+      }
+      return results;
+    }
+
+    // ---- Wikipedia 英文搜索（补充国际新闻条目）----
+    async function searchWikipediaEN(query) {
+      const results = [];
+      try {
+        const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=3&format=json&origin=*&srprop=snippet|timestamp`;
+        const resp = await fetch(searchUrl, { signal: AbortSignal.timeout(8000) });
+        if (!resp.ok) return results;
+
+        const data = await resp.json();
+        const searchItems = data?.query?.search || [];
+
+        for (const item of searchItems) {
+          const snippet = item.snippet
+            .replace(/<[^>]+>/g, '')
+            .replace(/&quot;/g, '"')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .trim();
+
+          results.push({
+            title: item.title,
+            snippet: snippet,
+            source: 'Wikipedia(EN)',
+            url: `https://en.wikipedia.org/wiki/${encodeURIComponent(item.title)}`,
+            date: item.timestamp ? item.timestamp.split('T')[0] : ''
+          });
+        }
+      } catch (e) {
+        console.warn('Wikipedia EN 搜索失败:', query, e.message);
+      }
+      return results;
+    }
+
+    // ---- 中文实体→英文翻译（用于 GDELT 搜索）----
+    function translateEntities(entities) {
+      const m = {
+        '美国': 'USA', '以色列': 'Israel', '伊朗': 'Iran', '俄罗斯': 'Russia',
+        '乌克兰': 'Ukraine', '中国': 'China', '中东': 'Middle East',
+        '叙利亚': 'Syria', '黎巴嫩': 'Lebanon', '真主党': 'Hezbollah',
+        '哈马斯': 'Hamas', '胡塞武装': 'Houthis', '摩萨德': 'Mossad',
+        '核武器': 'nuclear weapons', '核协议': 'nuclear deal',
+        '铀浓缩': 'uranium enrichment', '制裁': 'sanctions', '停火': 'ceasefire',
+        '拜登': 'Biden', '特朗普': 'Trump', '内塔尼亚胡': 'Netanyahu',
+        '哈梅内伊': 'Khamenei', '普京': 'Putin', '泽连斯基': 'Zelensky',
+        '波斯湾': 'Persian Gulf', '红海': 'Red Sea',
+        '霍尔木兹海峡': 'Strait of Hormuz', '戈兰高地': 'Golan Heights',
+        '加沙': 'Gaza', '北约': 'NATO', '联合国': 'UN', '欧盟': 'EU',
+        'IAEA': 'IAEA', '航母': 'aircraft carrier',
+        '防空导弹': 'air defense missile', '铁穹': 'Iron Dome',
+        '核设施': 'nuclear facility', '浓缩铀': 'enriched uranium',
+        '代理人战争': 'proxy war', '军事基地': 'military base',
+        '沙特': 'Saudi Arabia', '沙特阿拉伯': 'Saudi Arabia',
+        '阿联酋': 'UAE', '海湾国家': 'Gulf states', '海湾': 'Gulf',
+        '国葬': 'state funeral', '吊唁': 'condolence',
+        '外交大臣': 'foreign minister', '谅解备忘录': 'MOU',
+        '霍尔木兹': 'Hormuz', '代理人': 'proxy',
+        '谈判': 'negotiations', '巴勒斯坦': 'Palestine',
+        '约旦河西岸': 'West Bank', '难民': 'refugees',
+        '人道主义': 'humanitarian', '重建': 'reconstruction',
+        '抵抗之弧': 'Axis of Resistance'
+      };
+      return entities.filter(e => m[e]).map(e => m[e]).join(' ');
+    }
+
+    // ---- GDELT 全球新闻搜索（免费无Key，65语言，每15分钟更新）----
+    async function searchGDELT(query) {
+      const results = [];
+      const enQuery = translateEntities(query.split(' ').filter(w => /[\u4e00-\u9fff]/.test(w) ? ({
+        '美国':'USA','以色列':'Israel','伊朗':'Iran','俄罗斯':'Russia','中国':'China',
+        '中东':'Middle East','叙利亚':'Syria','黎巴嫩':'Lebanon','真主党':'Hezbollah',
+        '哈马斯':'Hamas','胡塞武装':'Houthis','制裁':'sanctions','停火':'ceasefire',
+        '特朗普':'Trump','内塔尼亚胡':'Netanyahu','哈梅内伊':'Khamenei',
+        '霍尔木兹海峡':'Strait of Hormuz','加沙':'Gaza','核协议':'nuclear deal',
+        '沙特':'Saudi Arabia','沙特阿拉伯':'Saudi Arabia','阿联酋':'UAE',
+        '海湾国家':'Gulf states','国葬':'state funeral','谅解备忘录':'MOU',
+        '代理人':'proxy','谈判':'negotiations','巴勒斯坦':'Palestine'
+      }[w] || w) : w));
+      const searchQ = enQuery || query;
+      try {
+        const url = 'https://api.gdeltproject.org/api/v2/doc/doc?query='
+          + encodeURIComponent(searchQ)
+          + '&mode=artlist&format=json&maxrecords=6&sourcelang=eng&sort=datedesc';
+        const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        if (resp.status === 429) {
+          console.warn('GDELT 限速(429)，跳过后续请求');
+          return results;
+        }
+        if (!resp.ok) return results;
+        const data = await resp.json();
+        const articles = data?.articles || [];
+        for (const a of articles) {
+          results.push({
+            title: a.title || '',
+            snippet: (a.snippet || a.summary || '').replace(/<[^>]+>/g, '').trim().substring(0, 300),
+            source: a.source?.name || a.domain || 'GDELT',
+            url: a.url || '',
+            date: (a.seendate || '').split('T')[0] || ''
+          });
+        }
+      } catch (e) {
+        console.warn('GDELT 搜索失败:', query, e.message);
+      }
+      return results;
+    }
+
+    // ---- 百度百科搜索（补充中国权威信息源，best-effort）----
+    async function searchBaidu(query) {
+      const results = [];
+      try {
+        const url = 'https://baike.baidu.com/api/open/search?format=json&appid=0&rn=5&word='
+          + encodeURIComponent(query);
+        const resp = await fetch(url, { signal: AbortSignal.timeout(6000) });
+        if (!resp.ok) return results;
+        const data = await resp.json();
+        const items = data?.result || [];
+        for (const item of items) {
+          results.push({
+            title: item.title || item.display?.title || '',
+            snippet: (item.abstract || item.display?.abstract || '').replace(/<[^>]+>/g, '').trim(),
+            source: '百度百科',
+            url: item.url || item.display?.link || '',
+            date: ''
+          });
+        }
+      } catch (e) {
+        console.warn('百度百科搜索失败:', query, e.message);
+      }
+      return results;
+    }
+
+    // ---- DuckDuckGo HTML 搜索（通过 CORS 代理）----
+    // ---- 搜索国内官方权威媒体（第1层·最高优先级）----
+    async function searchChineseOfficialMedia(query) {
+      const results = [];
+      const officialSites = [
+        { name: '新华社', domain: 'xinhuanet.com' },
+        { name: '人民日报', domain: 'people.com.cn' },
+        { name: '央视', domain: 'cctv.com' }
+      ];
+
+      for (const site of officialSites) {
+        const siteQuery = `site:${site.domain} ${query}`;
+        const encodedQuery = encodeURIComponent(siteQuery);
+        const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodedQuery}`;
+
+        for (const proxy of CORS_PROXIES) {
+          try {
+            const resp = await fetch(proxy + encodeURIComponent(ddgUrl), {
+              signal: AbortSignal.timeout(8000)
+            });
+            if (!resp.ok) continue;
+
+            const html = await resp.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const resultElements = doc.querySelectorAll('.result');
+
+            resultElements.forEach((el, i) => {
+              if (i >= 4) return;
+              const titleEl = el.querySelector('.result__a');
+              const snippetEl = el.querySelector('.result__snippet');
+              if (titleEl) {
+                const url = extractOriginalUrl(titleEl.href || '');
+                // 确认来自目标站点
+                if (url.includes(site.domain)) {
+                  results.push({
+                    title: titleEl.textContent.trim(),
+                    snippet: snippetEl ? snippetEl.textContent.trim() : '',
+                    source: site.name,
+                    url: url,
+                    date: '',
+                    tier: 1
+                  });
+                }
+              }
+            });
+
+            if (results.length > 0) break; // 代理成功则跳出
+          } catch (e) {
+            // 代理失败继续下一个
+          }
+        }
+
+        if (results.filter(r => r.source === site.name).length > 0) {
+          await new Promise(r => setTimeout(r, 3000)); // 站点间隔3秒
+        }
+      }
+
+      return results;
+    }
+
+    async function searchDuckDuckGo(query) {
+      const results = [];
+      const encodedQuery = encodeURIComponent(query);
+      const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodedQuery}`;
+
+      for (const proxy of CORS_PROXIES) {
+        try {
+          const resp = await fetch(proxy + encodeURIComponent(ddgUrl), {
+            signal: AbortSignal.timeout(8000)
+          });
+          if (!resp.ok) continue;
+
+          const html = await resp.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          const resultElements = doc.querySelectorAll('.result');
+
+          resultElements.forEach((el, i) => {
+            if (i >= 5) return;
+            const titleEl = el.querySelector('.result__a');
+            const snippetEl = el.querySelector('.result__snippet');
+            if (titleEl) {
+              results.push({
+                title: titleEl.textContent.trim(),
+                snippet: snippetEl ? snippetEl.textContent.trim() : '',
+                source: 'DuckDuckGo',
+                url: extractOriginalUrl(titleEl.href || ''),
+                date: ''
+              });
+            }
+          });
+
+          if (results.length > 0) break;
+        } catch (e) {
+          console.warn('DuckDuckGo 代理失败:', proxy, e.message);
+        }
+      }
+      return results;
+    }
+
+    // ---- 百度网页搜索（通过CORS代理）----
+    async function searchBaiduWeb(query) {
+      const results = [];
+      const encodedQuery = encodeURIComponent(query);
+      const baiduUrl = `https://www.baidu.com/s?wd=${encodedQuery}&rn=10`;
+
+      for (const proxy of CORS_PROXIES) {
+        try {
+          const resp = await fetch(proxy + encodeURIComponent(baiduUrl), {
+            signal: AbortSignal.timeout(8000),
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+          });
+          if (!resp.ok) continue;
+          const html = await resp.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          // 百度搜索结果容器 class="result" 或 class="c-container"
+          const resultElements = doc.querySelectorAll('.result.c-container, .c-container');
+
+          resultElements.forEach((el, i) => {
+            if (i >= 6) return;
+            const titleEl = el.querySelector('h3 a, .c-title a');
+            const snippetEl = el.querySelector('.c-abstract, .content-right_8Zs40, .c-span-last');
+            if (titleEl) {
+              let url = titleEl.href || '';
+              // 百度链接可能是跳转链接，尝试提取真实URL
+              const dataUrl = el.getAttribute('data-url') || el.querySelector('[data-url]')?.getAttribute('data-url') || '';
+              if (dataUrl) url = dataUrl;
+              results.push({
+                title: titleEl.textContent.trim(),
+                snippet: snippetEl ? snippetEl.textContent.trim() : '',
+                source: '百度',
+                url: url,
+                date: ''
+              });
+            }
+          });
+          if (results.length > 0) break;
+        } catch (e) {
+          console.warn('百度搜索代理失败:', proxy, e.message);
+        }
+      }
+      return results;
+    }
+
+    // ---- Bing网页搜索（通过CORS代理）----
+    async function searchBing(query) {
+      const results = [];
+      const encodedQuery = encodeURIComponent(query);
+      const bingUrl = `https://www.bing.com/search?q=${encodedQuery}&count=10`;
+
+      for (const proxy of CORS_PROXIES) {
+        try {
+          const resp = await fetch(proxy + encodeURIComponent(bingUrl), {
+            signal: AbortSignal.timeout(8000),
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+          });
+          if (!resp.ok) continue;
+          const html = await resp.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          // Bing搜索结果容器
+          const resultElements = doc.querySelectorAll('#b_results .b_algo, li.b_algo');
+
+          resultElements.forEach((el, i) => {
+            if (i >= 6) return;
+            const titleEl = el.querySelector('h2 a');
+            const snippetEl = el.querySelector('.b_caption p, .b_lineclamp2');
+            if (titleEl) {
+              results.push({
+                title: titleEl.textContent.trim(),
+                snippet: snippetEl ? snippetEl.textContent.trim() : '',
+                source: 'Bing',
+                url: titleEl.href || '',
+                date: ''
+              });
+            }
+          });
+          if (results.length > 0) break;
+        } catch (e) {
+          console.warn('Bing搜索代理失败:', proxy, e.message);
+        }
+      }
+      return results;
+    }
+
+    // ---- 综合搜索：提取关键词 → 多查询 → 去重 ----
+    async function performSearch(userText) {
+      let allResults = [];
+      const seenTitles = new Set();
+      const { entities, timeHint, queries } = extractKeywords(userText);
+      const searchQueries = queries.length > 0 ? queries : [userText.substring(0, 30)];
+      console.log('[v2.7] 分层搜索，查询:', searchQueries);
+
+      for (const q of searchQueries) {
+        // 第1层: 国内官方权威媒体直搜（最高优先级）
+        const cnR = await searchChineseOfficialMedia(q);
+        for (const r of cnR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
+        if (cnR.length > 0) await new Promise(r => setTimeout(r, 3500));
+
+        // 第2层: 百度网页搜索
+        const baiduR = await searchBaiduWeb(q);
+        for (const r of baiduR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
+        if (baiduR.length > 0) await new Promise(r => setTimeout(r, 2500));
+
+        // 第2层(续): 中文Wikipedia（间接引用官方媒体）
+        const zhR = await searchWikipedia(q);
+        for (const r of zhR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
+
+        // 第3层: Bing搜索
+        const bingR = await searchBing(q);
+        for (const r of bingR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
+        if (bingR.length > 0) await new Promise(r => setTimeout(r, 2500));
+
+        // 第3层(续): GDELT全球新闻（每查询间隔5.5秒避免限速）
+        const gR = await searchGDELT(q);
+        for (const r of gR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
+        if (gR.length > 0) await new Promise(r => setTimeout(r, 5500));
+
+        // 第4层: 英文Wikipedia（国际背景）
+        if (entities.length > 0) {
+          const enQ = translateEntities(entities);
+          if (enQ) {
+            const enR = await searchWikipediaEN(enQ);
+            for (const r of enR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
+          }
+        }
+
+        if (allResults.length >= 20) break;
+      }
+
+      // 第4层: DuckDuckGo补充（不足10条时）
+      if (allResults.length < 10 && searchQueries.length > 0) {
+        const ddR = await searchDuckDuckGo(searchQueries[0]);
+        for (const r of ddR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
+      }
+
+      console.log('[v2.7] 搜索完成，共 ' + allResults.length + ' 条结果');
+      return allResults;
+    }
+
+    // ---- 格式化搜索结果为文本 ----
+    function formatSearchResults(results) {
+      if (results.length === 0) {
+        return '\n\n【搜索提示】搜索引擎未返回直接相关的最新结果。请基于你的知识库进行框架性分析。你可以说"关于最近几天的具体动态我暂时没有搜到"，然后基于知识库中的已知信息展开分析。绝对禁止编造搜索结果和知识库中都不存在的具体事件、数据、来源。';
+      }
+      var text = '\n\n## 以下搜索结果来自真实搜索引擎（按来源优先级排列）\n';
+      for (var i = 0; i < results.length; i++) {
+        var r = results[i];
+        var tier = '';
+        if (r.tier === 1 || ['新华社', '人民日报', '央视'].indexOf(r.source) >= 0) tier = '[权威媒体·第1层] ';
+        else if (r.source === '百度') tier = '[百度·第2层] ';
+        else if (r.source === 'Wikipedia') tier = '[中文百科·第2层] ';
+        else if (r.source === '百度百科') tier = '[中国百科·第2层] ';
+        else if (r.source === 'Bing') tier = '[Bing·第3层] ';
+        else if (r.source.indexOf('GDELT') === 0) tier = '[国际新闻·第3层] ';
+        else if (r.source === 'Wikipedia(EN)') tier = '[国际背景·第4层] ';
+        else tier = '[补充源·第5层] ';
+        text += '\n[' + (i + 1) + '] ' + tier + r.title + '（来源：' + r.source;
+        if (r.date) text += '，日期：' + r.date;
+        text += '）';
+        if (r.snippet) text += '\n    ' + r.snippet;
+        if (r.url) text += '\n    链接：' + r.url;
+        text += '\n';
+      }
+      text += '\n【来源层级说明】\n第1层（最高优先）=新华社/人民日报/央视等国内官方权威媒体直搜结果\n第2层=百度网页搜索+中文/百度百科（间接引用官方媒体）+知识库中的书籍和亲历者一手资料\n第3层=Bing搜索+GDELT全球新闻（Reuters/AP/BBC等，不同视角补充）\n第4层=英文Wikipedia（国际背景）\n第5层=DuckDuckGo等补充源\n引用时严格按层级优先使用第1层来源，第3-5层仅作不同视角补充。所有引用必须标注具体媒体名称+日期+事实，严禁编造不存在的来源。';
+      return text;
+    }
+
+    // ---- 发送消息（核心流程） ----
+    async function sendMessage() {
+      const content = inputBox.value.trim();
+      if (!content || isProcessing) return;
+
+      // 清空输入
+      inputBox.value = '';
+      inputBox.style.height = 'auto';
+      sendBtn.disabled = true;
+      isProcessing = true;
+
+      // 移除欢迎消息
+      const welcomeMsg = chatMessages.querySelector('#introMessage');
+      if (welcomeMsg) welcomeMsg.remove();
+
+      // 显示用户消息
+      const userTime = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      addMessageToUI('user', content, userTime);
+      saveMessage('user', content, userTime);
+      messageHistory.push({ role: 'user', content });
+
+      // 创建流式 bot 消息占位
+      const elems = createStreamingBotMessage();
+      let searchContext = '';
+
+      try {
+        // === 步骤1：判断是否需要搜索 ===
+        if (needsSearch(content)) {
+          setSearchStatus(elems);
+          const searchResults = await performSearch(content);
+          searchContext = formatSearchResults(searchResults);
+          console.log(`搜索完成，共 ${searchResults.length} 条结果`);
+        }
+
+        // === 步骤2：调用 DeepSeek API（streaming） ===
+        setThinkingStatus(elems);
+
+        const now = new Date();
+        const timeStr = now.toLocaleString('zh-CN', {
+          year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
+          hour: '2-digit', minute: '2-digit'
+        });
+
+        // 构造完整 system prompt：人格规则 + 知识库 + 当前时间 + 搜索结果
+        let systemContent = SYSTEM_PROMPT;
+        if (KNOWLEDGE_BASE) {
+          systemContent += '\n\n' + KNOWLEDGE_BASE;
+        }
+        systemContent += '\n\n当前时间：' + timeStr;
+        systemContent += '\n\n【重要】以上知识库内容是你的事实储备，你对其中的事件和框架非常熟悉。对于知识库中未覆盖的最新事件，请使用搜索结果。绝对不要说"我的数据库截止到某年某月"——你有知识库+联网搜索，不存在知识截止的问题。';
+        systemContent += searchContext;
+
+        const apiMessages = [
+          { role: 'system', content: systemContent },
+          ...messageHistory
+        ];
+
+        const response = await fetch(DEEPSEEK_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+          },
+          body: JSON.stringify({
+            model: DEEPSEEK_MODEL,
+            messages: apiMessages,
+            max_tokens: 2000,
+            temperature: 0.3,
+            stream: true,
+            thinking: { type: 'enabled' }
+          })
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          let errMsg = `API 请求失败: ${response.status}`;
+          try {
+            const errJson = JSON.parse(errText);
+            errMsg = errJson.error?.message || errMsg;
+          } catch (e) {}
+          throw new Error(errMsg);
+        }
+
+        // === 步骤3：解析 SSE 流 ===
+        clearStatus(elems);
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let reasoningContent = '';
+        let answerContent = '';
+        let isThinkingPhase = true;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') continue;
+
+            try {
+              const json = JSON.parse(data);
+              const delta = json.choices?.[0]?.delta;
+              if (!delta) continue;
+
+              // 处理 reasoning_content（思考过程）
+              if (delta.reasoning_content) {
+                if (isThinkingPhase) {
+                  isThinkingPhase = false;
+                }
+                reasoningContent += delta.reasoning_content;
+                if (elems.reasoningDiv) {
+                  elems.reasoningDiv.textContent = reasoningContent;
+                  if (elems.reasoningToggle.style.display === 'none') {
+                    elems.reasoningToggle.style.display = 'block';
+                  }
+                }
+              }
+
+              // 处理 content（正式回答）
+              if (delta.content) {
+                if (reasoningContent && !answerContent) {
+                  clearStatus(elems);
+                }
+                answerContent += delta.content;
+                elems.bubble.textContent = answerContent;
+                scrollToBottom();
+              }
+            } catch (e) {
+              // 解析单行失败则跳过
+            }
+          }
+        }
+
+        // === 步骤4：流结束，最终处理 ===
+        clearStatus(elems);
+
+        if (!answerContent.trim()) {
+          throw new Error('未收到AI回复');
+        }
+
+        // 解析并渲染引用来源
+        renderCitations(elems.bubble, answerContent);
+
+        // === 步骤4.5：事实核查（条件触发） ===
+        if (needsFactCheck(answerContent)) {
+          // 显示核查状态
+          const checkDiv = document.createElement('div');
+          checkDiv.style.cssText = 'font-size:12px;color:#888;margin-top:8px;padding:4px 0;';
+          checkDiv.textContent = '🔍 正在验证信息准确性...';
+          elems.bubble.parentElement.appendChild(checkDiv);
+          scrollToBottom();
+          
+          try {
+            const issue = await factCheck(content, answerContent);
+            if (issue) {
+              checkDiv.innerHTML = '⚠️ <strong style="color:#d97706;">自我纠错</strong>：<span style="color:#92400e;">' + escapeHtml(issue) + '</span>';
+              checkDiv.style.cssText = 'font-size:12px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-top:8px;line-height:1.5;';
+            } else {
+              // 核查通过，移除提示
+              checkDiv.remove();
+            }
+          } catch (e) {
+            // 核查失败，静默移除
+            console.warn('事实核查失败:', e.message);
+            checkDiv.remove();
+          }
+        }
+
+        // 保存到历史
+        const botTime = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        elems.timeDiv.textContent = botTime;
+        saveMessage('assistant', answerContent.trim(), botTime);
+        messageHistory.push({ role: 'assistant', content: answerContent.trim() });
+
+      } catch (error) {
+        clearStatus(elems);
+        if (!elems.bubble.textContent.trim()) {
+          elems.bubble.textContent = '出错了: ' + error.message;
+          elems.bubble.style.color = '#ef4444';
+        }
+        console.error('Error:', error);
+      } finally {
+        isProcessing = false;
+        sendBtn.disabled = inputBox.value.trim() === '';
+        inputBox.focus();
+      }
+    }
+
+    // ---- 工具函数 ----
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // ---- 事实核查：规则引擎 ----
+    function needsFactCheck(text) {
+      const patterns = [
+        /\d{4}年.{0,30}\d+/,                    // 年份+具体数字
+        /据.{2,20}(报道|称|表示|透露|统计)/,      // "据...报道"类引用句式
+        /根据.{2,20}(显示|数据|统计|报道|研究)/,   // "根据...显示"类
+        /\S{2,6}(宣布|签署|发布|表示|称|强调).{2,30}(了|出|称)/,  // 人名+事件动词
+        /\d+(\.\d+)?%/,                           // 百分比数据
+        /(约|超过|达到|高达|将近).{0,5}\d+(亿|万|千|百|十)/,  // 精确数量
+        /《.{2,30}》.{0,10}(著|写|编|说过|认为)/,  // 书名+作者断言
+        /研究(表明|发现|显示|证实)/,                // "研究表明"类
+      ];
+      
+      let matchCount = 0;
+      for (const p of patterns) {
+        if (p.test(text)) matchCount++;
+      }
+      // 至少命中2个模式才触发核查（避免误触发）
+      return matchCount >= 2;
+    }
+
+    // ---- 事实核查：独立API调用 ----
+    async function factCheck(userQuery, aiResponse) {
+      const checkMessages = [
+        { 
+          role: 'system', 
+          content: '你是一个严格的事实核查员。你的任务是检查AI回答中是否存在事实性错误。只回复核查结果，不要多余解释。' 
+        },
+        {
+          role: 'user',
+          content: `请检查以下AI回答是否存在以下问题：
+1. 编造了具体的事件、数据、日期或人物发言
+2. 将不确定的信息表述为确定事实
+3. 虚假引用（编造书名+作者、论文标题等）
+
+用户问题：${userQuery}
+AI回答：${aiResponse}
+
+规则：
+- 如果发现问题，用一句话指出核心问题（不超过40字）
+- 如果回答整体可靠或只是观点性内容，只回复"通过"
+- 不要质疑观点和分析框架，只核查事实性断言`
+        }
+      ];
+
+      const resp = await fetch(DEEPSEEK_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: DEEPSEEK_MODEL,
+          messages: checkMessages,
+          max_tokens: 100,
+          temperature: 0.1,
+          stream: false
+        })
+      });
+      
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      const result = data.choices?.[0]?.message?.content?.trim();
+      // 只有明确发现问题才返回，"通过"或空值返回null
+      if (!result || result === '通过' || result.includes('通过')) return null;
+      return result;
+    }
+
+    // ---- 解析并渲染引用来源 ----
+    // ---- 从DuckDuckGo代理/跳转URL中提取原始URL ----
+    function extractOriginalUrl(url) {
+      if (!url) return '';
+      // DuckDuckGo redirect: https://duckduckgo.com/l/?uddg=ENCODED_URL&rut=...
+      const uddgMatch = url.match(/[?&]uddg=([^&]+)/);
+      if (uddgMatch) {
+        try { return decodeURIComponent(uddgMatch[1]); } catch(e) {}
+      }
+      // allorigins/win 等代理URL
+      const proxyMatch = url.match(/(?:raw\/?url=|quest=|\?=)(https?%3A[^&]+)/);
+      if (proxyMatch) {
+        try { return decodeURIComponent(proxyMatch[1]); } catch(e) {}
+      }
+      return url;
+    }
+
+    function renderCitations(bubbleEl, fullText) {
+      const marker = '\u3010\u53c2\u8003\u6765\u6e90\u3011'; // 【参考来源】
+      const idx = fullText.indexOf(marker);
+      if (idx === -1) return; // 没有引用区
+
+      const mainText = fullText.substring(0, idx).trim();
+      const citationText = fullText.substring(idx + marker.length).trim();
+
+      // 解析每条引用: [1] 来源 | 日期 | 可信度：高/中/低 | URL
+      const lines = citationText.split('\n').filter(l => l.trim());
+      const citations = [];
+      for (const line of lines) {
+        const match = line.match(/\[\d+\]\s*(.+?)\s*\|\s*(\d{4}[-/]\d{1,2}[-/]\d{0,2})\s*\|\s*可信度[：:]\s*(高|中|低)\s*\|\s*(https?:\/\/\S+)/);
+        if (match) {
+          citations.push({ source: match[1].trim(), date: match[2].trim(), credibility: match[3], url: extractOriginalUrl(match[4].trim()) });
+        }
+      }
+
+      if (citations.length === 0) return;
+
+      // 更新主内容区（去掉引用区）
+      bubbleEl.textContent = mainText;
+
+      // 构建引用HTML
+      const credClass = { '高': 'high', '中': 'medium', '低': 'low' };
+      let citeHtml = '<div class="citations-section"><div class="citations-title">📎 参考来源（' + citations.length + '条）</div>';
+      for (const c of citations) {
+        const cls = credClass[c.credibility] || 'medium';
+        citeHtml += '<a class="citation-card" href="' + c.url + '" target="_blank" rel="noopener">';
+        citeHtml += '<span class="citation-source">' + c.source + '</span>';
+        citeHtml += '<span class="citation-date">' + c.date + '</span>';
+        citeHtml += '<span class="citation-credibility ' + cls + '">' + c.creditability + '</span>';
+        citeHtml += '<span class="citation-url">' + c.url + '</span>';
+        citeHtml += '</a>';
+      }
+      citeHtml += '</div>';
+
+      // 追加到bubble后面
+      const citeDiv = document.createElement('div');
+      citeDiv.innerHTML = citeHtml;
+      bubbleEl.parentElement.appendChild(citeDiv.firstElementChild);
+    }
+
+    function scrollToBottom() {
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // 启动应用（异步，等待配置加载）
+    init();
+  </script>
+</body>
