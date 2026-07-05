@@ -1584,6 +1584,36 @@
       scrollToBottom();
     }
 
+    // ---- AnySearch API（CORS 原生支持，免费1000次/天）----
+    async function searchAnySearch(query) {
+      const results = [];
+      try {
+        const resp = await fetch('https://api.anysearch.com/v1/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: query, max_results: 8, freshness: 'month' }),
+          signal: AbortSignal.timeout(12000)
+        });
+        if (!resp.ok) return results;
+        const data = await resp.json();
+        if (data.code !== 0 || !data.data || !data.data.results) return results;
+
+        for (const item of data.data.results) {
+          const snippet = (item.snippet || item.content || '').replace(/<[^>]+>/g, '').trim().substring(0, 300);
+          results.push({
+            title: item.title || '',
+            snippet: snippet,
+            source: 'AnySearch',
+            url: item.url || '',
+            date: ''
+          });
+        }
+      } catch (e) {
+        console.warn('[AnySearch] error:', e.message);
+      }
+      return results;
+    }
+
     async function performSearch(userText, elems) {
       let allResults = [];
       const seenTitles = new Set();
@@ -1592,7 +1622,12 @@
       console.log('[v2.7] 分层搜索，查询:', searchQueries);
 
       for (const q of searchQueries) {
-        // 第1层: 国内官方权威媒体直搜（最高优先级）
+        // 第0层: AnySearch（综合搜索，CORS直连，最高优先级）
+        const asR = await searchAnySearch(q);
+        for (const r of asR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
+        if (asR.length > 0) { updateSearchProgress(elems, 'AnySearch综合搜索', asR, allResults); await new Promise(r => setTimeout(r, 2000)); }
+
+        // 第1层: 国内官方权威媒体直搜
         const cnR = await searchChineseOfficialMedia(q);
         for (const r of cnR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
         if (cnR.length > 0) { updateSearchProgress(elems, '官方媒体', cnR, allResults); await new Promise(r => setTimeout(r, 3500)); }
@@ -1653,6 +1688,7 @@
         else if (r.source === '百度百科') tier = '[中国百科·第2层] ';
         else if (r.source === 'Bing') tier = '[Bing·第3层] ';
         else if (r.source.indexOf('GDELT') === 0) tier = '[国际新闻·第4层] ';
+        else if (r.source === 'AnySearch') tier = '[综合搜索·第0层] ';
         else if (r.source === 'Wikipedia') tier = '[中文百科·第5层] ';
         else if (r.source === 'Wikipedia(EN)') tier = '[国际背景·第6层] ';
         else tier = '[补充源·第7层] ';
@@ -1662,7 +1698,8 @@
         if (r.snippet) text += '\n    ' + r.snippet;
         text += '\n';
       }
-      text += '\n【来源层级说明】\n第1层（最高优先）=新华社/人民日报/央视等国内官方权威媒体直搜结果\n第2层=百度网页搜索+百度百科（中文信息补充）+知识库中的书籍和亲历者一手资料\n第3层=Bing搜索（多源补充）\n第4层=GDELT全球新闻（Reuters/AP/BBC等，不同视角补充）\n第5层=中文Wikipedia（间接引用官方媒体）\n第6层=英文Wikipedia（国际背景）\n第7层=DuckDuckGo等补充源\n引用时严格按层级优先使用第1层来源，第4-7层仅作不同视角补充。所有引用必须标注具体媒体名称+日期+事实，严禁编造不存在的来源。';
+      text += '\n【来源层级说明】\n第0层（最高优先）=AnySearch综合搜索（国内服务、多源聚合、CORS直连）
+第1层=新华社/人民日报/央视等国内官方权威媒体直搜结果\n第2层=百度网页搜索+百度百科（中文信息补充）+知识库中的书籍和亲历者一手资料\n第3层=Bing搜索（多源补充）\n第4层=GDELT全球新闻（Reuters/AP/BBC等，不同视角补充）\n第5层=中文Wikipedia（间接引用官方媒体）\n第6层=英文Wikipedia（国际背景）\n第7层=DuckDuckGo等补充源\n引用时严格按层级优先使用第1层来源，第4-7层仅作不同视角补充。所有引用必须标注具体媒体名称+日期+事实，严禁编造不存在的来源。';
       text += '\n【引用格式规范（极其重要）】\n在回答中引用来源时，只在相关事实后面用方括号标注编号，如"据新华社报道[1]"、"发售日已确认为11月19日[2][3]"。\n严禁在回答中写任何 http:// 或 https:// 开头的网址链接。你只能使用 [数字] 格式的编号来引用来源。\n引用知识库条目时使用 [KB-编号] 格式，如"[KB-12]中分析过这个框架"。';
       // 存储搜索结果供后续渲染使用
       window._lastSearchResults = results;
