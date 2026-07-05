@@ -1586,7 +1586,30 @@
     }
 
     // ---- 综合搜索：提取关键词 → 多查询 → 去重 ----
-    async function performSearch(userText) {
+    // ---- 搜索进度实时显示 ----
+    function updateSearchProgress(elems, layerName, newResults, allResults) {
+      if (!elems || !elems.statusArea) return;
+      let html = '<div style="padding:10px 14px;background:#f8fafc;border-radius:10px;font-size:13px;line-height:1.7;border:1px solid #e2e8f0;max-height:300px;overflow-y:auto;">';
+      html += '<div style="color:#2563eb;font-weight:600;margin-bottom:6px;">\ud83d\udd0d 搜索中...</div>';
+      html += '<div style="color:#64748b;font-size:11px;margin-bottom:8px;">已找到 ' + allResults.length + ' 条结果</div>';
+      if (newResults && newResults.length > 0) {
+        html += '<div style="color:#0f172a;font-size:12px;font-weight:500;margin-bottom:4px;">\ud83d\udce1 ' + layerName + '</div>';
+        for (let i = 0; i < newResults.length && i < 5; i++) {
+          const r = newResults[i];
+          const src = r.source || '未知来源';
+          const date = r.date ? ' \u00b7 ' + r.date : '';
+          html += '<div style="color:#334155;font-size:12px;padding:2px 0 2px 12px;border-left:2px solid #cbd5e1;margin-bottom:3px;">' + r.title + '<span style="color:#94a3b8;font-size:11px;"> ' + src + date + '</span></div>';
+        }
+        if (newResults.length > 5) {
+          html += '<div style="color:#94a3b8;font-size:11px;padding-left:12px;">...还有 ' + (newResults.length - 5) + ' 条</div>';
+        }
+      }
+      html += '</div>';
+      elems.statusArea.innerHTML = html;
+      scrollToBottom();
+    }
+
+    async function performSearch(userText, elems) {
       let allResults = [];
       const seenTitles = new Set();
       const { entities, timeHint, queries } = extractKeywords(userText);
@@ -1597,26 +1620,27 @@
         // 第1层: 国内官方权威媒体直搜（最高优先级）
         const cnR = await searchChineseOfficialMedia(q);
         for (const r of cnR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
-        if (cnR.length > 0) await new Promise(r => setTimeout(r, 3500));
+        if (cnR.length > 0) { updateSearchProgress(elems, '官方媒体', cnR, allResults); await new Promise(r => setTimeout(r, 3500)); }
 
         // 第2层: 百度网页搜索
         const baiduR = await searchBaiduWeb(q);
         for (const r of baiduR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
-        if (baiduR.length > 0) await new Promise(r => setTimeout(r, 2500));
+        if (baiduR.length > 0) { updateSearchProgress(elems, '百度', baiduR, allResults); await new Promise(r => setTimeout(r, 2500)); }
 
         // 第3层: Bing搜索
         const bingR = await searchBing(q);
         for (const r of bingR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
-        if (bingR.length > 0) await new Promise(r => setTimeout(r, 2500));
+        if (bingR.length > 0) { updateSearchProgress(elems, 'Bing', bingR, allResults); await new Promise(r => setTimeout(r, 2500)); }
 
         // 第4层: GDELT全球新闻（每查询间隔5.5秒避免限速）
         const gR = await searchGDELT(q);
         for (const r of gR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
-        if (gR.length > 0) await new Promise(r => setTimeout(r, 5500));
+        if (gR.length > 0) { updateSearchProgress(elems, 'GDELT全球新闻', gR, allResults); await new Promise(r => setTimeout(r, 5500)); }
 
         // 第5层: 中文Wikipedia（间接引用官方媒体）
         const zhR = await searchWikipedia(q);
         for (const r of zhR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
+        if (zhR.length > 0) updateSearchProgress(elems, '中文百科', zhR, allResults);
 
         // 第6层: 英文Wikipedia（国际背景）
         if (entities.length > 0) {
@@ -1700,7 +1724,7 @@
         // === 步骤1：判断是否需要搜索 ===
         if (needsSearch(content)) {
           setProgressStep(elems, 'searching');
-          const searchResults = await performSearch(content);
+          const searchResults = await performSearch(content, elems);
           lastSearchResults = searchResults;
           searchContext = formatSearchResults(searchResults);
           console.log(`搜索完成，共 ${searchResults.length} 条结果`);
@@ -1763,7 +1787,26 @@
         }
 
         // === 步骤3：解析 SSE 流 ===
-        setProgressStep(elems, 'streaming');
+        // 流式输出时实时显示内容生成进度
+        let streamingUpdateTimer = setInterval(function() {
+          if (!elems.statusArea) { clearInterval(streamingUpdateTimer); return; }
+          const reasonLen = reasoningContent.length;
+          const answerLen = answerContent.length;
+          const phase = isThinkingPhase ? '思考中' : '生成回答中';
+          let sh = '<div style="padding:10px 14px;background:#f8f9fa;border-radius:10px;font-size:13px;line-height:1.8;border:1px solid #e9ecef;max-height:200px;overflow-y:auto;">';
+          sh += '<div style="color:#16a34a;font-size:12px;">\u2705 搜索完成</div>';
+          sh += '<div style="color:#' + (isThinkingPhase ? '7c3aed' : '6b7280') + ';font-weight:600;">\ud83d\udcac ' + phase + '\uff08' + (reasonLen + answerLen) + ' 字\uff09</div>';
+          if (reasonLen > 0) {
+            const preview = reasoningContent.substring(Math.max(0, reasonLen - 100)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            sh += '<div style="color:#7c3aed;font-size:11px;margin-top:4px;padding:4px 8px;background:#f5f3ff;border-radius:6px;border-left:3px solid #a78bfa;">\ud83e\udde0 ' + preview + '</div>';
+          }
+          if (answerLen > 0) {
+            const preview = answerContent.substring(Math.max(0, answerLen - 100)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            sh += '<div style="color:#334155;font-size:11px;margin-top:4px;padding:4px 8px;background:#f8fafc;border-radius:6px;border-left:3px solid #94a3b8;">\ud83d\udcdd ' + preview + '</div>';
+          }
+          sh += '</div>';
+          elems.statusArea.innerHTML = sh;
+        }, 2000);
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -1792,6 +1835,11 @@
               if (delta.reasoning_content) {
                 if (isThinkingPhase) {
                   isThinkingPhase = false;
+                  if (elems.reasoningSection && !elems.reasoningSection.classList.contains('expanded')) {
+                    elems.reasoningSection.classList.add('expanded');
+                    elems.reasoningSection.style.display = 'block';
+                    if (elems.reasoningToggle) elems.reasoningToggle.style.display = 'block';
+                  }
                 }
                 reasoningContent += delta.reasoning_content;
                 if (elems.reasoningDiv) {
@@ -1815,7 +1863,7 @@
         }
 
         // === 步骤4：流结束，最终处理 ===
-        // progress will be managed by the fact-check loop below
+        if (typeof streamingUpdateTimer !== 'undefined') clearInterval(streamingUpdateTimer);
 
         if (!answerContent.trim()) {
           throw new Error('未收到AI回复');
@@ -1827,14 +1875,39 @@
 
         if (needsFactCheck(currentAnswer) && lastSearchResults.length > 0) {
           for (let round = 1; round <= MAX_CORRECTION_ROUNDS; round++) {
-            setProgressStep(elems, 'factcheck');
+            // 显示核查进度（含证据和搜索来源）
+            {
+              let fch = '<div style="padding:10px 14px;background:#fffbeb;border-radius:10px;font-size:13px;line-height:1.7;border:1px solid #fde68a;max-height:250px;overflow-y:auto;">';
+              fch += '<div style="color:#d97706;font-weight:600;margin-bottom:6px;">\ud83d\udd0e 事实核查（第' + round + '轮）</div>';
+              fch += '<div style="color:#92400e;font-size:11px;margin-bottom:8px;">正在比对 ' + lastSearchResults.length + ' 条搜索结果中的事实性断言...</div>';
+              const showResults = lastSearchResults.slice(0, 4);
+              for (let ri = 0; ri < showResults.length; ri++) {
+                const sr = showResults[ri];
+                const snippet = (sr.snippet || '').substring(0, 60);
+                fch += '<div style="font-size:12px;color:#334155;padding:3px 0 3px 10px;border-left:2px solid #fbbf24;margin-bottom:3px;">';
+                fch += '<strong>[' + (ri+1) + ']</strong> ' + (sr.source || '来源') + ': ' + (sr.title || '').substring(0, 50);
+                if (snippet) fch += '<br><span style="color:#64748b;font-size:11px;">' + snippet + '...</span>';
+                fch += '</div>';
+              }
+              fch += '</div>';
+              elems.statusArea.innerHTML = fch;
+            }
 
             try {
               const issue = await factCheck(content, currentAnswer, lastSearchResults);
 
               if (!issue) {
                 // 核查通过
-                setProgressStep(elems, 'done');
+                {
+                  let dhtml = '<div style="padding:8px 12px;background:#f0fdf4;border-radius:10px;font-size:13px;border:1px solid #bbf7d0;">';
+                  dhtml += '<div style="color:#16a34a;font-weight:600;">\u2705 事实核查通过</div>';
+                  dhtml += '<div style="color:#15803d;font-size:12px;">回答中的事实性内容与搜索结果一致</div>';
+                  dhtml += '</div>';
+                  elems.statusArea.innerHTML = dhtml;
+                  elems.statusArea.style.opacity = '1';
+                  elems.statusArea.style.transition = 'opacity 0.5s';
+                  setTimeout(function() { elems.statusArea.style.opacity = '0'; setTimeout(function() { elems.statusArea.innerHTML = ''; }, 500); }, 3000);
+                }
                 break;
               }
 
@@ -1848,8 +1921,14 @@
                 break;
               }
 
-              // 调用修正
-              setProgressStep(elems, 'correcting');
+              // 显示发现的问题并修正
+              {
+                let chtml = '<div style="padding:10px 14px;background:#fef2f2;border-radius:10px;font-size:13px;line-height:1.7;border:1px solid #fecaca;">';
+                chtml += '<div style="color:#dc2626;font-weight:600;margin-bottom:6px;">\u270f\ufe0f 发现错误，正在修正（第' + round + '轮）</div>';
+                chtml += '<div style="color:#991b1b;font-size:12px;padding:4px 8px;background:#fff1f2;border-radius:6px;">' + escapeHtml(issue) + '</div>';
+                chtml += '</div>';
+                elems.statusArea.innerHTML = chtml;
+              }
               const corrected = await correctAnswer(content, currentAnswer, issue, lastSearchResults, systemContent);
 
               if (!corrected) {
