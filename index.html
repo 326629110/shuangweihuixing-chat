@@ -1153,80 +1153,55 @@
 
     // ---- 中文关键词提取 ----
     function extractKeywords(text) {
-      // 简称→全称映射（处理"美以伊"等中文简称）
-      const ABBR_MAP = {
-        '美以伊': ['美国', '以色列', '伊朗'],
-        '美伊': ['美国', '伊朗'],
-        '以伊': ['以色列', '伊朗'],
-        '俄乌': ['俄罗斯', '乌克兰'],
-        '中美': ['中国', '美国'],
-        '美俄': ['美国', '俄罗斯'],
-        '美乌': ['美国', '乌克兰']
-      };
-
-      // 先展开简称
-      let expandedText = text;
-      const abbrExpansions = [];
-      for (const [abbr, fulls] of Object.entries(ABBR_MAP)) {
-        if (text.includes(abbr)) {
-          abbrExpansions.push(...fulls);
-        }
-      }
-
-      // 已知实体词典
-      const ENTITIES = [
-        '美国', '以色列', '伊朗', '俄罗斯', '乌克兰', '中国', '中东',
-        '叙利亚', '黎巴嫩', '真主党', '哈马斯', '胡塞武装', '摩萨德',
-        '核武器', '核协议', '铀浓缩', '制裁', '停火', '停战',
-        '拜登', '特朗普', '内塔尼亚胡', '哈梅内伊', '普京', '泽连斯基',
-        '波斯湾', '红海', '霍尔木兹海峡', '戈兰高地', '加沙',
-        '北约', '联合国', '欧盟', 'IAEA',
-        '伊朗核', '以伊冲突', '美伊关系', '中东局势',
-        '杜鲁门号', '航母', '驱逐舰', '防空导弹', '铁穹',
-        '核设施', '浓缩铀', '代理人战争', '军事基地', '沙特', '沙特阿拉伯', '阿联酋', '海湾国家', '海湾', '哈梅内伊', '国葬', '吊唁', '外交大臣', '谅解备忘录', '霍尔木兹', '代理人', '制裁', '停火', '谈判', '内塔尼亚胡', '真主党', '胡塞武装', '巴勒斯坦', '约旦河西岸', '难民', '人道主义', '重建', '抵抗之弧'
-      ];
-
-      // 合并简称展开 + 正文匹配，去重
-      const foundSet = new Set(abbrExpansions);
-      for (const entity of ENTITIES) {
-        if (text.includes(entity)) foundSet.add(entity);
-      }
-      const found = [...foundSet];
-
-      // 时间关键词
-      const TIME_WORDS = ['最新', '近一周', '今天', '昨天', '本周', '上周', '最近', '目前', '现在', '近期'];
+      // v2.8 智能关键词提取：通篇理解用户问题，按话题分别搜索
+      const queries = [];
+      const entities = [];
       let timeHint = '';
+      
+      // 1. 提取时间提示
+      const TIME_WORDS = ['最新', '近一周', '今天', '昨天', '本周', '上周', '最近', '目前', '现在', '近期', '进度', '发售', '确认'];
       for (const tw of TIME_WORDS) {
         if (text.includes(tw)) { timeHint = tw; break; }
       }
-
-      // 生成搜索查询列表
-      const queries = [];
-
-      if (found.length >= 2) {
-        // 多实体组合查询
-        queries.push(found.slice(0, 3).join(' '));
-      }
-      if (found.length >= 1) {
-        // 单实体 + 时间
-        const mainEntity = found[0];
-        if (timeHint) {
-          queries.push(`${mainEntity} ${timeHint}`);
+      
+      // 2. 按标点符号分割成短句
+      const sentences = text.split(/[？?！!。，,；;：:]/).map(s => s.trim()).filter(s => s.length >= 4);
+      
+      // 3. 对每个短句生成搜索查询
+      for (const sentence of sentences) {
+        // 移除常见疑问词，保留核心内容
+        let query = sentence
+          .replace(/^(什么|怎么|有没有|是否|可以|能否|请问|告诉|我|你|给|分析|一下)/, '')
+          .replace(/(吗|呢|吧|啊|呀)/g, '')
+          .trim();
+        
+        // 如果清理后长度合适（4-50字），加入查询列表
+        if (query.length >= 4 && query.length <= 50) {
+          queries.push(query);
         }
-        queries.push(mainEntity);
+        
+        // 尝试提取实体（名词短语）
+        const words = query.match(/[A-Za-z]+[A-Za-z0-9]*|[\u4e00-\u9fa5]+/g) || [];
+        for (const word of words) {
+          if (word.length >= 2 && !['什么', '怎么', '有没有', '是否', '可以', '能否', '请问', '告诉', '分析'].includes(word)) {
+            entities.push(word);
+          }
+        }
+        
+        // 最多3个查询
+        if (queries.length >= 3) break;
       }
-
-      // 兜底：去除常见停用词后的短文本
+      
+      // 4. 兜底：如果没提取到查询，用完整问题（截取前50字）
       if (queries.length === 0) {
-        const stopWords = /请|给|我|分析|一下|什么|怎么|看看|说说|请问|可以|吗|呢|的|了|是|在|和|与|对|也|就|都|而|及|到|把|被|让|给|着|过|不|没|有|这|那|个|些|他|她|它|们|你|我|其|该|为|以|于|中|上|下|大|小|多|少|又|再|还|很|最|已|将|要|会|能|可|但|却|虽|如|若|则|因|故|所以|而且|并且|或者|要么|既|一边|不仅|而且|只要|只有|除非|直到|与其|宁可/g;
-        const cleaned = text.replace(stopWords, '').replace(/[，。！？、；：""''（）【】《》\s]+/g, ' ').trim();
-        if (cleaned.length > 2) {
-          queries.push(cleaned.substring(0, 20));
+        const fallback = text.substring(0, 50).trim();
+        if (fallback.length >= 4) {
+          queries.push(fallback);
         }
       }
-
-      console.log('提取的关键词:', found, '时间:', timeHint, '查询列表:', queries);
-      return { entities: found, timeHint, queries: [...new Set(queries)].slice(0, 3) };
+      
+      console.log('[v2.8] 提取的查询:', queries, '实体:', entities, '时间:', timeHint);
+      return { entities: [...new Set(entities)], timeHint, queries: [...new Set(queries)].slice(0, 3) };
     }
 
     // =============================================
