@@ -721,7 +721,8 @@
     const PERSONALITY_CONFIG_URL = './personality_config.json';
     const KNOWLEDGE_BASE_URL = './knowledge_base.json';
     let SYSTEM_PROMPT = '';
-    let KNOWLEDGE_BASE = '';  // 知识库内容（启动时加载）
+    let KNOWLEDGE_BASE = '';  // 知识库内容（启动时加载，仅含PERSONALITY+SYSTEM_PROMPT+DISTILLATION）
+    let KNOWLEDGE_CHUNKS = []; // {title: string, content: string, keywords: string[]}
     let currentVersion = '0.0.0';
 
     // ---- 降级版人格 Prompt（精简版，配置加载失败时使用）----
@@ -754,24 +755,10 @@
 - 有搜索结果时：用分析框架解读，不复述
 - 无搜索结果时：承认信息局限，只做框架性分析，禁止编造具体事件
 
-【引用来源输出规范——必须遵守】
-当你引用了搜索结果中的信息时，必须在回答末尾另起一行，输出以下格式的引用区（用于前端渲染为可点击链接）：
-
-【参考来源】
-[1] 来源名称 | 日期 | 可信度：高/中/低 | 链接URL
-[2] 来源名称 | 日期 | 可信度：高/中/低 | 链接URL
-
-可信度判断规则：
-- 高：新华社、央视、人民日报等国内官方权威媒体，或权威出版物
-- 中：Reuters、AP、BBC等国际主流媒体
-- 低：其他未明确来源或民间团体
-
-注意：
-- 每条引用必须有真实URL（从搜索结果中取），禁止编造链接
-- 来源名称必须是搜索结果中实际显示的媒体名
-- 日期格式：YYYY-MM-DD，如果搜索结果中没有精确日期，用搜索结果中最近的时间
-- 没有引用任何搜索结果时，不需要输出引用区
-- 只引用你真正在回答中使用了的搜索结果，不要把所有搜索结果都列上去`;
+【引用来源规范（编号引用制）】
+引用来源时只在相关事实后用方括号标注编号，如[1][3]。
+严禁在回答中输出任何 http:// 或 https:// 开头的网址。
+编号对应的是搜索结果的序号。`;
 
     // ---- 清除旧版缓存 ----
     (function clearLegacyCache() {
@@ -787,6 +774,76 @@
         console.log('已清除旧版缓存:', keysToRemove.length, '项');
       }
     })();
+
+    // ---- 知识库检索相关函数 ----
+    function extractKBKeywords(text) {
+      // 简单的中文关键词提取：去除停用词，提取2-8字的中文词组
+      const stopWords = new Set(['的', '了', '在', '是', '我', '有', '和', '就', '不', '人', '都', '一', '一个', '上', '也', '很', '到', '说', '要', '去', '你', '会', '着', '没有', '看', '好', '自己', '这', '他', '她', '它', '们', '那', '被', '从', '对', '与', '以', '及', '等', '中', '为', '或', '而', '但', '其', '之', '将', '于', '可以', '已', '通过', '进行', '分析', '相关', '核心', '主要', '关于', '以下', '以上', '包括', '以及', '其中', '如果', '因为', '所以', '但', '而且', '虽然', '然而', '因此', '什么', '怎么', '如何']);
+
+      // 提取中文词组（2-8字）
+      const chineseWords = text.match(/[\u4e00-\u9fff]{2,8}/g) || [];
+      // 提取英文词组
+      const englishWords = text.match(/[a-zA-Z][a-zA-Z0-9\-]{1,20}/g) || [];
+
+      const allWords = [...chineseWords, ...englishWords]
+        .map(w => w.toLowerCase())
+        .filter(w => !stopWords.has(w) && w.length >= 2);
+
+      // 去重
+      return [...new Set(allWords)];
+    }
+
+    function searchKnowledgeBase(query) {
+      if (KNOWLEDGE_CHUNKS.length === 0) return '';
+
+      const queryKeywords = extractKBKeywords(query);
+      if (queryKeywords.length === 0) return '';
+
+      // 为每个chunk计算匹配分数
+      const scored = KNOWLEDGE_CHUNKS.map((chunk, idx) => {
+        let score = 0;
+        const matchedKeywords = [];
+
+        for (const kw of queryKeywords) {
+          // 标题匹配（权重高）
+          if (chunk.title.includes(kw)) {
+            score += 3;
+            matchedKeywords.push(kw);
+          }
+          // 关键词列表匹配
+          if (chunk.keywords.includes(kw)) {
+            score += 2;
+            matchedKeywords.push(kw);
+          }
+          // 内容匹配（权重低）
+          if (chunk.content.includes(kw)) {
+            score += 1;
+          }
+        }
+
+        return { chunk, score, matchedKeywords, idx };
+      });
+
+      // 过滤得分为0的，按分数降序
+      const matched = scored
+        .filter(s => s.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+      // 取top 8（控制注入量）
+      const topChunks = matched.slice(0, 8);
+
+      if (topChunks.length === 0) return '';
+
+      // 构建注入文本
+      let text = '\n\n## 以下是从知识库中检索到的相关条目（与当前问题最相关的知识）\n';
+      for (const m of topChunks) {
+        text += '\n' + m.chunk.content + '\n';
+      }
+      text += '\n【提示】以上是从你的知识库中检索到的与当前问题最相关的条目。请优先使用这些条目中的信息，结合搜索结果进行框架性分析。知识库条目中未提及的最新事件请使用搜索结果补充。';
+
+      console.log(`知识库检索: query="${query}", 匹配${topChunks.length}/${KNOWLEDGE_CHUNKS.length}块, 关键词: ${queryKeywords.slice(0,10).join(',')}`);
+      return text;
+    }
 
     // ---- 加载外部人格配置 + 知识库 ----
     async function loadPersonalityConfig() {
@@ -813,12 +870,26 @@
       if (kbResult.status === 'fulfilled') {
         const kb = kbResult.value;
         const parts = [];
-        if (kb.KNOWLEDGE) parts.push('【知识库——你的事实储备】\n' + kb.KNOWLEDGE);
+        // KNOWLEDGE 不再全量注入，改为按需检索
+        // if (kb.KNOWLEDGE) parts.push('【知识库——你的事实储备】\n' + kb.KNOWLEDGE);
         if (kb.DISTILLATION) parts.push('【蒸馏笔记——你的经历和风格来源】\n' + kb.DISTILLATION);
         if (kb.PERSONALITY) parts.push('【人格定义】\n' + kb.PERSONALITY);
         if (kb.SYSTEM_PROMPT) parts.push('【系统指令】\n' + kb.SYSTEM_PROMPT);
         KNOWLEDGE_BASE = parts.join('\n\n---\n\n');
-        console.log(`知识库加载成功: ${KNOWLEDGE_BASE.length} 字符`);
+        // 按 ### 标题切分 KNOWLEDGE
+        if (kb.KNOWLEDGE) {
+          const sections = kb.KNOWLEDGE.split(/(?=^### )/m);
+          KNOWLEDGE_CHUNKS = sections
+            .filter(s => s.trim().startsWith('### '))
+            .map(section => {
+              const titleMatch = section.match(/^### (.+)/m);
+              const title = titleMatch ? titleMatch[1].trim() : '';
+              const keywords = extractKBKeywords(title + ' ' + section.substring(0, 200));
+              return { title, content: section.trim(), keywords };
+            });
+          console.log(`知识库切分为 ${KNOWLEDGE_CHUNKS.length} 个块`);
+        }
+        console.log(`知识库加载成功: ${KNOWLEDGE_BASE.length} 字符（不含KNOWLEDGE全量）`);
       } else {
         console.warn('知识库加载失败:', kbResult.reason);
       }
@@ -1593,10 +1664,17 @@
           hour: '2-digit', minute: '2-digit'
         });
 
-        // 构造完整 system prompt：人格规则 + 知识库 + 当前时间 + 搜索结果
+        // 构造完整 system prompt：人格规则 + 知识库 + 按需检索 + 当前时间 + 搜索结果
         let systemContent = SYSTEM_PROMPT;
         if (KNOWLEDGE_BASE) {
-          systemContent += '\n\n' + KNOWLEDGE_BASE;
+          systemContent += '\n\n' + KNOWLEDGE_BASE;  // 只包含PERSONALITY+SYSTEM_PROMPT+DISTILLATION
+        }
+        // 按需注入知识库（根据用户提问检索相关条目）
+        const kbContext = searchKnowledgeBase(content);
+        if (kbContext) {
+          systemContent += kbContext;
+        } else {
+          systemContent += '\n\n【知识库检索提示】当前问题未匹配到知识库中的特定条目。请基于你的通用知识和搜索结果进行框架性分析。';
         }
         systemContent += '\n\n当前时间：' + timeStr;
         systemContent += '\n\n【重要】以上知识库内容是你的事实储备，你对其中的事件和框架非常熟悉。对于知识库中未覆盖的最新事件，请使用搜索结果。绝对不要说"我的数据库截止到某年某月"——你有知识库+联网搜索，不存在知识截止的问题。';
