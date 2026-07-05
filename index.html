@@ -902,7 +902,7 @@
             const lastBotMsg = chatMessages.querySelector('.message.bot:last-child .message-content');
             if (lastBotMsg) {
               const lastBot = messages.filter(m => m.role === 'assistant').pop();
-              if (lastBot) renderCitations(lastBotMsg, lastBot.content);
+              if (lastBot) renderCitations(lastBotMsg, lastBot.content, window._lastSearchResults || []);
             }
             messageHistory = messages.map(m => ({ role: m.role, content: m.content }));
           }
@@ -1539,10 +1539,12 @@
         if (r.date) text += '，日期：' + r.date;
         text += '）';
         if (r.snippet) text += '\n    ' + r.snippet;
-        if (r.url) text += '\n    链接：' + r.url;
         text += '\n';
       }
       text += '\n【来源层级说明】\n第1层（最高优先）=新华社/人民日报/央视等国内官方权威媒体直搜结果\n第2层=百度网页搜索+百度百科（中文信息补充）+知识库中的书籍和亲历者一手资料\n第3层=Bing搜索（多源补充）\n第4层=GDELT全球新闻（Reuters/AP/BBC等，不同视角补充）\n第5层=中文Wikipedia（间接引用官方媒体）\n第6层=英文Wikipedia（国际背景）\n第7层=DuckDuckGo等补充源\n引用时严格按层级优先使用第1层来源，第4-7层仅作不同视角补充。所有引用必须标注具体媒体名称+日期+事实，严禁编造不存在的来源。';
+      text += '\n【引用格式规范（极其重要）】\n在回答中引用来源时，只在相关事实后面用方括号标注编号，如"据新华社报道[1]"、"发售日已确认为11月19日[2][3]"。\n严禁在回答中写任何 http:// 或 https:// 开头的网址链接。你只能使用 [数字] 格式的编号来引用来源。\n引用知识库条目时使用 [KB-编号] 格式，如"[KB-12]中分析过这个框架"。';
+      // 存储搜索结果供后续渲染使用
+      window._lastSearchResults = results;
       return text;
     }
 
@@ -1570,12 +1572,14 @@
       // 创建流式 bot 消息占位
       const elems = createStreamingBotMessage();
       let searchContext = '';
+      let lastSearchResults = [];
 
       try {
         // === 步骤1：判断是否需要搜索 ===
         if (needsSearch(content)) {
           setSearchStatus(elems);
           const searchResults = await performSearch(content);
+          lastSearchResults = searchResults;
           searchContext = formatSearchResults(searchResults);
           console.log(`搜索完成，共 ${searchResults.length} 条结果`);
         }
@@ -1692,7 +1696,7 @@
         }
 
         // 解析并渲染引用来源
-        renderCitations(elems.bubble, answerContent);
+        renderCitations(elems.bubble, answerContent, lastSearchResults);
 
         // === 步骤4.5：事实核查（条件触发） ===
         if (needsFactCheck(answerContent)) {
@@ -1704,7 +1708,7 @@
           scrollToBottom();
           
           try {
-            const issue = await factCheck(content, answerContent);
+            const issue = await factCheck(content, answerContent, lastSearchResults);
             if (issue) {
               checkDiv.innerHTML = '⚠️ <strong style="color:#d97706;">自我纠错</strong>：<span style="color:#92400e;">' + escapeHtml(issue) + '</span>';
               checkDiv.style.cssText = 'font-size:12px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-top:8px;line-height:1.5;';
@@ -1768,7 +1772,21 @@
     }
 
     // ---- 事实核查：独立API调用 ----
-    async function factCheck(userQuery, aiResponse) {
+    async function factCheck(userQuery, aiResponse, searchResults) {
+      // 从搜索结果生成判定依据文本（编号+标题+摘要，不超过1500字）
+      let searchResultsText = '';
+      if (searchResults && searchResults.length > 0) {
+        for (let i = 0; i < searchResults.length; i++) {
+          const r = searchResults[i];
+          searchResultsText += '[' + (i + 1) + '] ' + (r.title || '') + '（来源：' + (r.source || '') + (r.date ? '，日期：' + r.date : '') + '）';
+          if (r.snippet) searchResultsText += ' ' + r.snippet;
+          searchResultsText += '\n';
+        }
+        if (searchResultsText.length > 1500) {
+          searchResultsText = searchResultsText.substring(0, 1500) + '\n...(已截断)';
+        }
+      }
+
       const checkMessages = [
         { 
           role: 'system', 
@@ -1781,6 +1799,7 @@
 2. 将不确定的信息表述为确定事实
 3. 虚假引用（编造书名+作者、论文标题等）
 
+${searchResultsText ? '以下是AI回答时可用的搜索结果（来自真实搜索引擎）：\n' + searchResultsText + '\n请根据以上搜索结果判断AI回答中的事实性断言是否与搜索结果一致。如果AI回答中的断言与搜索结果矛盾，或者AI回答编造了搜索结果中不存在的具体数据/事件，则指出问题。\n' : ''}
 用户问题：${userQuery}
 AI回答：${aiResponse}
 
@@ -1831,44 +1850,54 @@ AI回答：${aiResponse}
       return url;
     }
 
-    function renderCitations(bubbleEl, fullText) {
-      const marker = '\u3010\u53c2\u8003\u6765\u6e90\u3011'; // 【参考来源】
-      const idx = fullText.indexOf(marker);
-      if (idx === -1) return; // 没有引用区
+    function renderCitations(bubbleEl, fullText, searchResults) {
+      // 编号引用制：扫描 [数字] 格式引用，替换为可点击上标链接
+      if (!searchResults || searchResults.length === 0) return;
 
-      const mainText = fullText.substring(0, idx).trim();
-      const citationText = fullText.substring(idx + marker.length).trim();
+      // 收集正文中实际引用的编号
+      const citedNums = new Set();
+      let processedText = fullText;
 
-      // 解析每条引用: [1] 来源 | 日期 | 可信度：高/中/低 | URL
-      const lines = citationText.split('\n').filter(l => l.trim());
-      const citations = [];
-      for (const line of lines) {
-        const match = line.match(/\[\d+\]\s*(.+?)\s*\|\s*(\d{4}[-/]\d{1,2}[-/]\d{0,2})\s*\|\s*可信度[：:]\s*(高|中|低)\s*\|\s*(https?:\/\/\S+)/);
-        if (match) {
-          citations.push({ source: match[1].trim(), date: match[2].trim(), credibility: match[3], url: extractOriginalUrl(match[4].trim()) });
-        }
+      // 替换 [数字] 为上标链接（排除 [KB-数字] 知识库引用）
+      processedText = processedText.replace(/\[(\d+)\]/g, function(match, numStr) {
+        const num = parseInt(numStr, 10);
+        if (num < 1 || num > searchResults.length) return match; // 越界保留原文本
+        citedNums.add(num);
+        const r = searchResults[num - 1];
+        const url = r.url ? extractOriginalUrl(r.url) : '#';
+        return '<sup><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">[' + num + ']</a></sup>';
+      });
+
+      // 知识库引用 [KB-数字] 暂时保留纯文本（不做映射）
+
+      // 更新主内容
+      bubbleEl.innerHTML = '';
+
+      // 将处理后的文本写入 bubble（逐段落）
+      const paragraphs = processedText.split('\n').filter(p => p.trim());
+      for (const p of paragraphs) {
+        const pEl = document.createElement('p');
+        pEl.innerHTML = p;
+        pEl.style.margin = '0.3em 0';
+        bubbleEl.appendChild(pEl);
       }
 
-      if (citations.length === 0) return;
+      // 在底部生成参考来源区域（只列出被实际引用的）
+      if (citedNums.size === 0) return;
 
-      // 更新主内容区（去掉引用区）
-      bubbleEl.textContent = mainText;
-
-      // 构建引用HTML
-      const credClass = { '高': 'high', '中': 'medium', '低': 'low' };
-      let citeHtml = '<div class="citations-section"><div class="citations-title">📎 参考来源（' + citations.length + '条）</div>';
-      for (const c of citations) {
-        const cls = credClass[c.credibility] || 'medium';
-        citeHtml += '<a class="citation-card" href="' + c.url + '" target="_blank" rel="noopener">';
-        citeHtml += '<span class="citation-source">' + c.source + '</span>';
-        citeHtml += '<span class="citation-date">' + c.date + '</span>';
-        citeHtml += '<span class="citation-credibility ' + cls + '">' + c.creditability + '</span>';
-        citeHtml += '<span class="citation-url">' + c.url + '</span>';
+      const sortedNums = Array.from(citedNums).sort((a, b) => a - b);
+      let citeHtml = '<div class="citations-section"><div class="citations-title">📎 参考来源（' + sortedNums.length + '条）</div>';
+      for (const num of sortedNums) {
+        const r = searchResults[num - 1];
+        const url = r.url ? extractOriginalUrl(r.url) : '';
+        citeHtml += '<a class="citation-card" href="' + escapeHtml(url) + '" target="_blank" rel="noopener">';
+        citeHtml += '<span class="citation-source">[' + num + '] ' + escapeHtml(r.source || '未知来源') + '</span>';
+        if (r.title) citeHtml += '<span class="citation-date" style="margin-left:4px;">' + escapeHtml(r.title) + '</span>';
+        if (r.date) citeHtml += '<span class="citation-date" style="margin-left:4px;">' + escapeHtml(r.date) + '</span>';
         citeHtml += '</a>';
       }
       citeHtml += '</div>';
 
-      // 追加到bubble后面
       const citeDiv = document.createElement('div');
       citeDiv.innerHTML = citeHtml;
       bubbleEl.parentElement.appendChild(citeDiv.firstElementChild);
