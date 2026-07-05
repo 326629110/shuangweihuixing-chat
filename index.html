@@ -1093,36 +1093,52 @@
 
     // ---- 实时进度显示系统 ----
     function setProgressStep(elems, step) {
-      // 获取或创建进度容器
-      let progressDiv = elems.bubble.parentElement.querySelector('.progress-steps');
-      if (!progressDiv) {
-        progressDiv = document.createElement('div');
-        progressDiv.className = 'progress-steps';
-        progressDiv.style.cssText = 'font-size:12px;color:#666;margin-bottom:8px;padding:8px 12px;background:rgba(248,249,250,0.8);border-radius:8px;line-height:1.8;transition:opacity 0.3s;';
-        elems.bubble.parentElement.insertBefore(progressDiv, elems.bubble);
-      }
-
-      const steps = {
-        'searching': '🔍 正在搜索相关信息...',
-        'thinking': '🤔 正在组织回答...',
-        'factcheck': '🔎 正在进行事实核查...',
-        'correcting': '✏️ 正在修正错误...',
-        'done': '✅ 核查通过'
+      // 直接在 statusArea 中显示进度（statusArea 在 bubble 上方，始终可见）
+      const { statusArea } = elems;
+      
+      const stepConfig = {
+        'searching': { icon: '🔍', text: '正在搜索相关信息...', color: '#2563eb', done: [] },
+        'thinking':  { icon: '🤔', text: '正在组织回答...', color: '#7c3aed', done: ['searching'] },
+        'factcheck': { icon: '🔎', text: '正在进行事实核查...', color: '#d97706', done: ['searching', 'thinking', 'streaming'] },
+        'correcting':{ icon: '✏️', text: '正在修正错误...', color: '#dc2626', done: ['searching', 'thinking', 'streaming', 'factcheck'] },
+        'done':      { icon: '✅', text: '核查通过', color: '#16a34a', done: ['searching', 'thinking', 'streaming', 'factcheck'], fadeOut: true },
+        'streaming': { icon: '💬', text: '正在生成回答...', color: '#6b7280', done: ['searching', 'thinking'] }
       };
 
-      // 累计显示已完成的步骤
-      let html = '';
-      if (step === 'thinking' || step === 'factcheck' || step === 'correcting' || step === 'done') {
-        html += '<div style="color:#16a34a;">✅ 已完成搜索</div>';
-      }
-      if (step === 'factcheck' || step === 'correcting' || step === 'done') {
-        html += '<div style="color:#16a34a;">✅ 已完成回答</div>';
-      }
+      const labels = {
+        'searching': '✅ 搜索完成',
+        'thinking': '✅ 思考完成',
+        'streaming': '✅ 回答完成',
+        'factcheck': '✅ 核查完成',
+        'correcting': '✅ 修正完成'
+      };
 
-      // 当前步骤
-      html += '<div style="font-weight:bold;">' + (steps[step] || step) + '</div>';
-
-      progressDiv.innerHTML = html;
+      const cfg = stepConfig[step] || { icon: '⏳', text: step, color: '#666', done: [] };
+      
+      let html = '<div style="padding:8px 12px;background:#f8f9fa;border-radius:10px;font-size:13px;line-height:1.8;border:1px solid #e9ecef;">';
+      
+      // 已完成的步骤
+      for (const d of cfg.done) {
+        if (labels[d]) {
+          html += '<div style="color:#16a34a;font-size:12px;">' + labels[d] + '</div>';
+        }
+      }
+      
+      // 当前步骤（带动画）
+      html += '<div style="color:' + cfg.color + ';font-weight:600;">' + cfg.icon + ' ' + cfg.text + '</div>';
+      html += '</div>';
+      
+      statusArea.innerHTML = html;
+      statusArea.style.opacity = '1';
+      statusArea.style.transition = 'opacity 0.5s';
+      
+      // 核查通过后3秒自动淡出
+      if (cfg.fadeOut) {
+        setTimeout(function() {
+          statusArea.style.opacity = '0';
+          setTimeout(function() { statusArea.innerHTML = ''; }, 500);
+        }, 3000);
+      }
       scrollToBottom();
     }
 
@@ -1747,7 +1763,7 @@
         }
 
         // === 步骤3：解析 SSE 流 ===
-        clearStatus(elems);
+        setProgressStep(elems, 'streaming');
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -1802,7 +1818,7 @@
         }
 
         // === 步骤4：流结束，最终处理 ===
-        clearStatus(elems);
+        // progress will be managed by the fact-check loop below
 
         if (!answerContent.trim()) {
           throw new Error('未收到AI回复');
@@ -1858,7 +1874,12 @@
             }
           }
         } else {
-          clearStatus(elems);
+          // 不需要核查，显示完成并淡出
+          const { statusArea } = elems;
+          statusArea.innerHTML = '<div style="padding:8px 12px;background:#f0fdf4;border-radius:10px;font-size:13px;border:1px solid #bbf7d0;"><div style="color:#16a34a;font-weight:600;">✅ 回答完成</div></div>';
+          statusArea.style.opacity = '1';
+          statusArea.style.transition = 'opacity 0.5s';
+          setTimeout(function() { statusArea.style.opacity = '0'; setTimeout(function() { statusArea.innerHTML = ''; }, 500); }, 2000);
         }
 
         // 最终渲染引用来源
