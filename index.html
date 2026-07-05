@@ -1482,21 +1482,21 @@
         for (const r of baiduR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
         if (baiduR.length > 0) await new Promise(r => setTimeout(r, 2500));
 
-        // 第2层(续): 中文Wikipedia（间接引用官方媒体）
-        const zhR = await searchWikipedia(q);
-        for (const r of zhR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
-
         // 第3层: Bing搜索
         const bingR = await searchBing(q);
         for (const r of bingR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
         if (bingR.length > 0) await new Promise(r => setTimeout(r, 2500));
 
-        // 第3层(续): GDELT全球新闻（每查询间隔5.5秒避免限速）
+        // 第4层: GDELT全球新闻（每查询间隔5.5秒避免限速）
         const gR = await searchGDELT(q);
         for (const r of gR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
         if (gR.length > 0) await new Promise(r => setTimeout(r, 5500));
 
-        // 第4层: 英文Wikipedia（国际背景）
+        // 第5层: 中文Wikipedia（间接引用官方媒体）
+        const zhR = await searchWikipedia(q);
+        for (const r of zhR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
+
+        // 第6层: 英文Wikipedia（国际背景）
         if (entities.length > 0) {
           const enQ = translateEntities(entities);
           if (enQ) {
@@ -1529,12 +1529,12 @@
         var tier = '';
         if (r.tier === 1 || ['新华社', '人民日报', '央视'].indexOf(r.source) >= 0) tier = '[权威媒体·第1层] ';
         else if (r.source === '百度') tier = '[百度·第2层] ';
-        else if (r.source === 'Wikipedia') tier = '[中文百科·第2层] ';
         else if (r.source === '百度百科') tier = '[中国百科·第2层] ';
         else if (r.source === 'Bing') tier = '[Bing·第3层] ';
-        else if (r.source.indexOf('GDELT') === 0) tier = '[国际新闻·第3层] ';
-        else if (r.source === 'Wikipedia(EN)') tier = '[国际背景·第4层] ';
-        else tier = '[补充源·第5层] ';
+        else if (r.source.indexOf('GDELT') === 0) tier = '[国际新闻·第4层] ';
+        else if (r.source === 'Wikipedia') tier = '[中文百科·第5层] ';
+        else if (r.source === 'Wikipedia(EN)') tier = '[国际背景·第6层] ';
+        else tier = '[补充源·第7层] ';
         text += '\n[' + (i + 1) + '] ' + tier + r.title + '（来源：' + r.source;
         if (r.date) text += '，日期：' + r.date;
         text += '）';
@@ -1542,7 +1542,7 @@
         if (r.url) text += '\n    链接：' + r.url;
         text += '\n';
       }
-      text += '\n【来源层级说明】\n第1层（最高优先）=新华社/人民日报/央视等国内官方权威媒体直搜结果\n第2层=百度网页搜索+中文/百度百科（间接引用官方媒体）+知识库中的书籍和亲历者一手资料\n第3层=Bing搜索+GDELT全球新闻（Reuters/AP/BBC等，不同视角补充）\n第4层=英文Wikipedia（国际背景）\n第5层=DuckDuckGo等补充源\n引用时严格按层级优先使用第1层来源，第3-5层仅作不同视角补充。所有引用必须标注具体媒体名称+日期+事实，严禁编造不存在的来源。';
+      text += '\n【来源层级说明】\n第1层（最高优先）=新华社/人民日报/央视等国内官方权威媒体直搜结果\n第2层=百度网页搜索+百度百科（中文信息补充）+知识库中的书籍和亲历者一手资料\n第3层=Bing搜索（多源补充）\n第4层=GDELT全球新闻（Reuters/AP/BBC等，不同视角补充）\n第5层=中文Wikipedia（间接引用官方媒体）\n第6层=英文Wikipedia（国际背景）\n第7层=DuckDuckGo等补充源\n引用时严格按层级优先使用第1层来源，第4-7层仅作不同视角补充。所有引用必须标注具体媒体名称+日期+事实，严禁编造不存在的来源。';
       return text;
     }
 
