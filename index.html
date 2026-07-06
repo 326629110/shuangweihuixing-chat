@@ -711,8 +711,6 @@
       '俄罗斯', '乌克兰', '中东', '叙利亚', '黎巴嫩', '真主党',
       '上周', '本周', '昨天', '这几天', '近期', '最近', '目前'
     ];
-    // CORS代理已迁移至腾讯云SCF（搜索走SCF代理），此处保留空数组兼容旧代码
-    const CORS_PROXIES = [];
 
     // ---- 人格配置 + 知识库外部加载 ----
     const PERSONALITY_CONFIG_URL = './personality_config.json';
@@ -946,7 +944,7 @@
 说下我的技术底子：
 • <strong>大模型</strong>：DeepSeek V4 Flash（深度思考模式）
 • <strong>人格库</strong>：蒸馏引擎从直播内容提炼，514+条知识条目，覆盖中东博弈、大国地缘、军事理论、政治体制、战锤文化、方法论 6大知识域
-• <strong>联网搜索</strong>：腾讯云 SCF 云函数代理 → AnySearch 搜索引擎 + 多源搜索（百度/Bing/GDELT/Wikipedia/DuckDuckGo），优先采信国内权威媒体
+• <strong>联网搜索</strong>：腾讯云 SCF 云函数代理 → AnySearch 搜索引擎 + 多源搜索（GDELT/Wikipedia），优先采信权威媒体
 • <strong>部署</strong>：GitHub Pages 静态托管 + Cloudflare KV 配置热更新
 • <strong>事实纪律</strong>：搜索→引用→最多3轮事实核查循环，不编造
 
@@ -1350,217 +1348,10 @@
       return results;
     }
 
-    // ---- 百度百科搜索（补充中国权威信息源，best-effort）----
-    async function searchBaidu(query) {
-      const results = [];
-      try {
-        const url = 'https://baike.baidu.com/api/open/search?format=json&appid=0&rn=5&word='
-          + encodeURIComponent(query);
-        const resp = await fetch(url, { signal: AbortSignal.timeout(6000) });
-        if (!resp.ok) return results;
-        const data = await resp.json();
-        const items = data?.result || [];
-        for (const item of items) {
-          results.push({
-            title: item.title || item.display?.title || '',
-            snippet: (item.abstract || item.display?.abstract || '').replace(/<[^>]+>/g, '').trim(),
-            source: '百度百科',
-            url: item.url || item.display?.link || '',
-            date: ''
-          });
-        }
-      } catch (e) {
-        console.warn('百度百科搜索失败:', query, e.message);
-      }
-      return results;
-    }
 
-    // ---- DuckDuckGo HTML 搜索（通过 CORS 代理）----
-    // ---- 搜索国内官方权威媒体（第1层·最高优先级）----
-    async function searchChineseOfficialMedia(query) {
-      const results = [];
-      const officialSites = [
-        { name: '新华社', domain: 'xinhuanet.com' },
-        { name: '人民日报', domain: 'people.com.cn' },
-        { name: '央视', domain: 'cctv.com' }
-      ];
 
-      for (const site of officialSites) {
-        const siteQuery = `site:${site.domain} ${query}`;
-        const encodedQuery = encodeURIComponent(siteQuery);
-        const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodedQuery}`;
 
-        for (const proxy of CORS_PROXIES) {
-          try {
-            const resp = await fetch(proxy + encodeURIComponent(ddgUrl), {
-              signal: AbortSignal.timeout(8000)
-            });
-            if (!resp.ok) continue;
 
-            const html = await resp.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const resultElements = doc.querySelectorAll('.result');
-
-            resultElements.forEach((el, i) => {
-              if (i >= 4) return;
-              const titleEl = el.querySelector('.result__a');
-              const snippetEl = el.querySelector('.result__snippet');
-              if (titleEl) {
-                const url = extractOriginalUrl(titleEl.href || '');
-                // 确认来自目标站点
-                if (url.includes(site.domain)) {
-                  results.push({
-                    title: titleEl.textContent.trim(),
-                    snippet: snippetEl ? snippetEl.textContent.trim() : '',
-                    source: site.name,
-                    url: url,
-                    date: '',
-                    tier: 1
-                  });
-                }
-              }
-            });
-
-            if (results.length > 0) break; // 代理成功则跳出
-          } catch (e) {
-            // 代理失败继续下一个
-          }
-        }
-
-        if (results.filter(r => r.source === site.name).length > 0) {
-          await new Promise(r => setTimeout(r, 3000)); // 站点间隔3秒
-        }
-      }
-
-      return results;
-    }
-
-    async function searchDuckDuckGo(query) {
-      const results = [];
-      const encodedQuery = encodeURIComponent(query);
-      const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodedQuery}`;
-
-      for (const proxy of CORS_PROXIES) {
-        try {
-          const resp = await fetch(proxy + encodeURIComponent(ddgUrl), {
-            signal: AbortSignal.timeout(8000)
-          });
-          if (!resp.ok) continue;
-
-          const html = await resp.text();
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(html, 'text/html');
-          const resultElements = doc.querySelectorAll('.result');
-
-          resultElements.forEach((el, i) => {
-            if (i >= 5) return;
-            const titleEl = el.querySelector('.result__a');
-            const snippetEl = el.querySelector('.result__snippet');
-            if (titleEl) {
-              results.push({
-                title: titleEl.textContent.trim(),
-                snippet: snippetEl ? snippetEl.textContent.trim() : '',
-                source: 'DuckDuckGo',
-                url: extractOriginalUrl(titleEl.href || ''),
-                date: ''
-              });
-            }
-          });
-
-          if (results.length > 0) break;
-        } catch (e) {
-          console.warn('DuckDuckGo 代理失败:', proxy, e.message);
-        }
-      }
-      return results;
-    }
-
-    // ---- 百度网页搜索（通过CORS代理）----
-    async function searchBaiduWeb(query) {
-      const results = [];
-      const encodedQuery = encodeURIComponent(query);
-      const baiduUrl = `https://www.baidu.com/s?wd=${encodedQuery}&rn=10`;
-
-      for (const proxy of CORS_PROXIES) {
-        try {
-          const resp = await fetch(proxy + encodeURIComponent(baiduUrl), {
-            signal: AbortSignal.timeout(8000),
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
-          });
-          if (!resp.ok) continue;
-          const html = await resp.text();
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(html, 'text/html');
-          // 百度搜索结果容器 class="result" 或 class="c-container"
-          const resultElements = doc.querySelectorAll('.result.c-container, .c-container');
-
-          resultElements.forEach((el, i) => {
-            if (i >= 6) return;
-            const titleEl = el.querySelector('h3 a, .c-title a');
-            const snippetEl = el.querySelector('.c-abstract, .content-right_8Zs40, .c-span-last');
-            if (titleEl) {
-              let url = titleEl.href || '';
-              // 百度链接可能是跳转链接，尝试提取真实URL
-              const dataUrl = el.getAttribute('data-url') || el.querySelector('[data-url]')?.getAttribute('data-url') || '';
-              if (dataUrl) url = dataUrl;
-              results.push({
-                title: titleEl.textContent.trim(),
-                snippet: snippetEl ? snippetEl.textContent.trim() : '',
-                source: '百度',
-                url: url,
-                date: ''
-              });
-            }
-          });
-          if (results.length > 0) break;
-        } catch (e) {
-          console.warn('百度搜索代理失败:', proxy, e.message);
-        }
-      }
-      return results;
-    }
-
-    // ---- Bing网页搜索（通过CORS代理）----
-    async function searchBing(query) {
-      const results = [];
-      const encodedQuery = encodeURIComponent(query);
-      const bingUrl = `https://www.bing.com/search?q=${encodedQuery}&count=10`;
-
-      for (const proxy of CORS_PROXIES) {
-        try {
-          const resp = await fetch(proxy + encodeURIComponent(bingUrl), {
-            signal: AbortSignal.timeout(8000),
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
-          });
-          if (!resp.ok) continue;
-          const html = await resp.text();
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(html, 'text/html');
-          // Bing搜索结果容器
-          const resultElements = doc.querySelectorAll('#b_results .b_algo, li.b_algo');
-
-          resultElements.forEach((el, i) => {
-            if (i >= 6) return;
-            const titleEl = el.querySelector('h2 a');
-            const snippetEl = el.querySelector('.b_caption p, .b_lineclamp2');
-            if (titleEl) {
-              results.push({
-                title: titleEl.textContent.trim(),
-                snippet: snippetEl ? snippetEl.textContent.trim() : '',
-                source: 'Bing',
-                url: titleEl.href || '',
-                date: ''
-              });
-            }
-          });
-          if (results.length > 0) break;
-        } catch (e) {
-          console.warn('Bing搜索代理失败:', proxy, e.message);
-        }
-      }
-      return results;
-    }
 
     // ---- 综合搜索：提取关键词 → 多查询 → 去重 ----
     // ---- 搜索进度实时显示 ----
@@ -1629,32 +1420,17 @@
         for (const r of asR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
         if (asR.length > 0) { updateSearchProgress(elems, 'AnySearch综合搜索', asR, allResults); await new Promise(r => setTimeout(r, 2000)); }
 
-        // 第1层: 国内官方权威媒体直搜
-        const cnR = await searchChineseOfficialMedia(q);
-        for (const r of cnR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
-        if (cnR.length > 0) { updateSearchProgress(elems, '官方媒体', cnR, allResults); await new Promise(r => setTimeout(r, 3500)); }
-
-        // 第2层: 百度网页搜索
-        const baiduR = await searchBaiduWeb(q);
-        for (const r of baiduR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
-        if (baiduR.length > 0) { updateSearchProgress(elems, '百度', baiduR, allResults); await new Promise(r => setTimeout(r, 2500)); }
-
-        // 第3层: Bing搜索
-        const bingR = await searchBing(q);
-        for (const r of bingR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
-        if (bingR.length > 0) { updateSearchProgress(elems, 'Bing', bingR, allResults); await new Promise(r => setTimeout(r, 2500)); }
-
-        // 第4层: GDELT全球新闻（每查询间隔5.5秒避免限速）
+        // 第1层: GDELT全球新闻（每查询间隔5.5秒避免限速）
         const gR = await searchGDELT(q);
         for (const r of gR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
         if (gR.length > 0) { updateSearchProgress(elems, 'GDELT全球新闻', gR, allResults); await new Promise(r => setTimeout(r, 5500)); }
 
-        // 第5层: 中文Wikipedia（间接引用官方媒体）
+        // 第2层: 中文Wikipedia（间接引用官方媒体）
         const zhR = await searchWikipedia(q);
         for (const r of zhR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
         if (zhR.length > 0) updateSearchProgress(elems, '中文百科', zhR, allResults);
 
-        // 第6层: 英文Wikipedia（国际背景）
+        // 第3层: 英文Wikipedia（国际背景）
         if (entities.length > 0) {
           const enQ = translateEntities(entities);
           if (enQ) {
@@ -1664,12 +1440,6 @@
         }
 
         if (allResults.length >= 20) break;
-      }
-
-      // 第4层: DuckDuckGo补充（不足10条时）
-      if (allResults.length < 10 && searchQueries.length > 0) {
-        const ddR = await searchDuckDuckGo(searchQueries[0]);
-        for (const r of ddR) { if (!seenTitles.has(r.title)) { seenTitles.add(r.title); allResults.push(r); } }
       }
 
       console.log('[v2.7] 搜索完成，共 ' + allResults.length + ' 条结果');
@@ -1686,13 +1456,10 @@
         var r = results[i];
         var tier = '';
         if (r.tier === 1 || ['新华社', '人民日报', '央视'].indexOf(r.source) >= 0) tier = '[权威媒体·第1层] ';
-        else if (r.source === '百度') tier = '[百度·第2层] ';
-        else if (r.source === '百度百科') tier = '[中国百科·第2层] ';
-        else if (r.source === 'Bing') tier = '[Bing·第3层] ';
-        else if (r.source.indexOf('GDELT') === 0) tier = '[国际新闻·第4层] ';
+        else if (r.source.indexOf('GDELT') === 0) tier = '[国际新闻·第1层] ';
         else if (r.source === 'AnySearch') tier = '[综合搜索·第0层] ';
-        else if (r.source === 'Wikipedia') tier = '[中文百科·第5层] ';
-        else if (r.source === 'Wikipedia(EN)') tier = '[国际背景·第6层] ';
+        else if (r.source === 'Wikipedia') tier = '[中文百科·第2层] ';
+        else if (r.source === 'Wikipedia(EN)') tier = '[国际背景·第3层] ';
         else tier = '[补充源·第7层] ';
         text += '\n[' + (i + 1) + '] ' + tier + r.title + '（来源：' + r.source;
         if (r.date) text += '，日期：' + r.date;
@@ -1700,7 +1467,7 @@
         if (r.snippet) text += '\n    ' + r.snippet;
         text += '\n';
       }
-      text += '\n【来源层级说明】\n第0层（最高优先）=AnySearch综合搜索（国内服务、多源聚合、CORS直连）\\n第1层=新华社/人民日报/央视等国内官方权威媒体直搜结果\n第2层=百度网页搜索+百度百科（中文信息补充）+知识库中的书籍和亲历者一手资料\n第3层=Bing搜索（多源补充）\n第4层=GDELT全球新闻（Reuters/AP/BBC等，不同视角补充）\n第5层=中文Wikipedia（间接引用官方媒体）\n第6层=英文Wikipedia（国际背景）\n第7层=DuckDuckGo等补充源\n引用时严格按层级优先使用第1层来源，第4-7层仅作不同视角补充。所有引用必须标注具体媒体名称+日期+事实，严禁编造不存在的来源。';
+      text += '\n【来源层级说明】\n第0层（最高优先）=AnySearch综合搜索（国内服务、多源聚合）\n第1层=GDELT全球新闻（Reuters/AP/BBC等国际通讯社）\n第2层=中文Wikipedia（间接引用官方媒体）\n第3层=英文Wikipedia（国际背景）\n引用时严格按层级优先使用第0-1层来源，第2-3层仅作补充。所有引用必须标注具体媒体名称+日期+事实，严禁编造不存在的来源。';
       text += '\n【引用格式规范（极其重要）】\n在回答中引用来源时，只在相关事实后面用方括号标注编号，如"据新华社报道[1]"、"发售日已确认为11月19日[2][3]"。\n严禁在回答中写任何 http:// 或 https:// 开头的网址链接。你只能使用 [数字] 格式的编号来引用来源。\n引用知识库条目时使用 [KB-编号] 格式，如"[KB-12]中分析过这个框架"。';
       // 存储搜索结果供后续渲染使用
       window._lastSearchResults = results;
