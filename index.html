@@ -1584,11 +1584,11 @@
       scrollToBottom();
     }
 
-    // ---- AnySearch API（CORS 原生支持，免费1000次/天）----
+    // ---- SCF搜索代理（腾讯云云函数代理，解决CORS限制）----
     async function searchAnySearch(query) {
       const results = [];
       try {
-        const resp = await fetch('https://api.anysearch.com/v1/search', {
+        const resp = await fetch('https://1450807742-7ovqjllhav.ap-guangzhou.tencentscf.com', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query: query, max_results: 8, freshness: 'month' }),
