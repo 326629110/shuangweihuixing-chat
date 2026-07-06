@@ -696,7 +696,7 @@
   <script>
     // =============================================
     // 双尾星 v2.9 - AI蒸馏版 DeepSeek Chat Interface
-    // 功能：深度思考 + 多源分层搜索(GDELT/Wikipedia/百度百科) + 蒸馏人格 + 反编造
+    // v3.0: 腾讯云SCF搜索代理 + 多源分层搜索 + 蒸馏人格(514条/6域) + 事实核查循环 + 反编造
     // 改造：Wikipedia API主搜索 + DuckDuckGo备用 + 搜索失败反编造指令
     // =============================================
 
@@ -944,9 +944,14 @@
       const loaded = await loadPersonalityConfig();
 
       // 添加开场白（居中欢迎页风格）
-      const introText = `大家好。我是<strong>双尾星</strong>，B站UP主「双尾彗星」的人格蒸馏版AI——不是本人，别搞混了。
+      const introText = `大家好。我是<strong>双尾星</strong>（蒸馏版），B站UP主「双尾彗星」的人格蒸馏版AI——不是本人，别搞混了。
 
-简单说下我的底子：底层跑的是 <strong>DeepSeek V4 Flash</strong>（深度思考模式），人格库由蒸馏引擎从双尾彗星直播内容中提炼，部署在 GitHub Pages，配置通过 Cloudflare KV 热更新。搜索方面接了 GDELT 全球新闻、中文/英文 Wikipedia、百度百科，多源分层，优先采信国内权威媒体。
+说下我的技术底子：
+• <strong>大模型</strong>：DeepSeek V4 Flash（深度思考模式）
+• <strong>人格库</strong>：蒸馏引擎从直播内容提炼，514+条知识条目，覆盖中东博弈、大国地缘、军事理论、政治体制、战锤文化、方法论 6大知识域
+• <strong>联网搜索</strong>：腾讯云 SCF 云函数代理 → AnySearch 搜索引擎 + 多源搜索（百度/Bing/GDELT/Wikipedia/DuckDuckGo），优先采信国内权威媒体
+• <strong>部署</strong>：GitHub Pages 静态托管 + Cloudflare KV 配置热更新
+• <strong>事实纪律</strong>：搜索→引用→最多3轮事实核查循环，不编造
 
 有什么想聊的，直接问。`;
 
