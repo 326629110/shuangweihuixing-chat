@@ -711,11 +711,8 @@
       '俄罗斯', '乌克兰', '中东', '叙利亚', '黎巴嫩', '真主党',
       '上周', '本周', '昨天', '这几天', '近期', '最近', '目前'
     ];
-    const CORS_PROXIES = [
-      'https://corsproxy.org/?',
-      'https://cors-proxy.htmldrivers.com/?',
-      'https://proxy.cors.sh/'
-    ];
+    // CORS代理已迁移至腾讯云SCF（搜索走SCF代理），此处保留空数组兼容旧代码
+    const CORS_PROXIES = [];
 
     // ---- 人格配置 + 知识库外部加载 ----
     const PERSONALITY_CONFIG_URL = './personality_config.json';
