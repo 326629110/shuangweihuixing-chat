@@ -2036,6 +2036,41 @@ AI回答：${aiResponse}
       const citeDiv = document.createElement('div');
       citeDiv.innerHTML = citeHtml;
       bubbleEl.parentElement.appendChild(citeDiv.firstElementChild);
+
+      // 异步检查引用链接可用性（通过favicon加载判断域名是否可达）
+      setTimeout(function() {
+        var citationCards = bubbleEl.parentElement.querySelectorAll('.citation-card');
+        citationCards.forEach(function(card) {
+          var url = card.getAttribute('href');
+          if (!url || url === '#' || url === '') return;
+          
+          try {
+            var domain = new URL(url).hostname;
+            var faviconUrl = 'https://icons.duckduckgo.com/ip3/' + encodeURIComponent(domain) + '.ico';
+            
+            var img = new Image();
+            var timeoutId = setTimeout(function() {
+              img.src = '';
+              card.style.opacity = '0.5';
+              card.title = '此链接可能已失效';
+            }, 5000);
+            
+            img.onload = function() {
+              clearTimeout(timeoutId);
+            };
+            img.onerror = function() {
+              clearTimeout(timeoutId);
+              card.style.opacity = '0.5';
+              card.title = '此链接可能已失效';
+            };
+            
+            img.src = faviconUrl;
+          } catch(e) {
+            card.style.opacity = '0.5';
+            card.title = '此链接可能已失效';
+          }
+        });
+      }, 100);
     }
 
     function scrollToBottom() {
