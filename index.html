@@ -1204,6 +1204,63 @@
       return { entities: [...new Set(entities)], timeHint, queries: [...new Set(queries)].slice(0, 3) };
     }
 
+    // ---- v3.2 LLM智能关键词提取（方案A）----
+    async function extractKeywordsByLLM(text) {
+      try {
+        const response = await fetch(DEEPSEEK_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+          },
+          body: JSON.stringify({
+            model: DEEPSEEK_MODEL,
+            messages: [
+              { role: 'system', content: '你是搜索关键词提取助手。从用户问题中提取3-5个高质量搜索关键词。保留所有专有名词（人名、组织名、地名、产品名）。只返回JSON数组，如["关键词1","关键词2"]，不要返回任何其他内容。' },
+              { role: 'user', content: text }
+            ],
+            temperature: 0.1,
+            max_tokens: 150
+          })
+        });
+
+        if (!response.ok) {
+          console.warn('[v3.2 LLM关键词] API失败:', response.status, '降级到规则提取');
+          return extractKeywords(text);
+        }
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content?.trim() || '';
+
+        // 解析JSON数组
+        let keywords = [];
+        const jsonMatch = content.match(/\[[\s\S]*?\]/);
+        if (jsonMatch) {
+          keywords = JSON.parse(jsonMatch[0]);
+        }
+
+        if (!Array.isArray(keywords) || keywords.length === 0) {
+          console.warn('[v3.2 LLM关键词] 解析为空，降级');
+          return extractKeywords(text);
+        }
+
+        // 过滤：确保字符串、长度合理、去重
+        keywords = [...new Set(keywords.filter(k => typeof k === 'string' && k.length >= 2 && k.length <= 30))].slice(0, 5);
+
+        if (keywords.length === 0) return extractKeywords(text);
+
+        console.log('[v3.2 LLM关键词] 提取结果:', keywords);
+        return {
+          entities: keywords.slice(0, 3),
+          timeHint: '',
+          queries: keywords
+        };
+      } catch (e) {
+        console.warn('[v3.2 LLM关键词] 异常:', e.message, '降级到规则提取');
+        return extractKeywords(text);
+      }
+    }
+
     // =============================================
     // 搜索层：Wikipedia API（主）+ DuckDuckGo（备）
     // =============================================
@@ -1410,9 +1467,9 @@
     async function performSearch(userText, elems) {
       let allResults = [];
       const seenTitles = new Set();
-      const { entities, timeHint, queries } = extractKeywords(userText);
+      const { entities, timeHint, queries } = await extractKeywordsByLLM(userText);
       const searchQueries = queries.length > 0 ? queries : [userText.substring(0, 30)];
-      console.log('[v2.7] 分层搜索，查询:', searchQueries);
+      console.log('[v3.2] 分层搜索，查询:', searchQueries);
 
       for (const q of searchQueries) {
         // 第0层: AnySearch（综合搜索，CORS直连，最高优先级）
