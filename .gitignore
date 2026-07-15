@@ -1,0 +1,8 @@
+personality_library/双尾彗星/media/
+personality_library/双尾彗星/local_materials/*.mp3
+personality_library/双尾彗星/local_materials/*.pdf
+personality_library/双尾彗星/local_materials/*.flv
+personality_library/双尾彗星/asr_output/*.json
+personality_library/双尾彗星/distilled/
+personality_library/双尾彗星/local_materials/transcript/
+personality_library/双尾彗星/local_materials/book/
